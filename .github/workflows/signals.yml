@@ -1,0 +1,38 @@
+name: AI Abdu Invest signallari
+
+on:
+  schedule:
+    - cron: "3 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signals
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Kutubxonalarni o'rnatish
+        run: pip install -r requirements.txt
+      - name: Bozorni tahlil qilish va signal yuborish
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py
+      - name: Signal holatini saqlash
+        run: |
+          git config user.name "abdu-invest-bot"
+          git config user.email "bot@users.noreply.github.com"
+          touch state.json
+          git add state.json
+          git diff --cached --quiet || (git commit -m "Signal holati" && git push)

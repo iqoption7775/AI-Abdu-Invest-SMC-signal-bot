@@ -34,7 +34,7 @@ def save_state(state: dict) -> None:
 def run() -> int:
     state = load_state()
     tfs = cfg.HTF_TIMEFRAMES + cfg.LTF_TIMEFRAMES
-    sent = 0
+    candidates = []
     for sym in cfg.SYMBOLS:
         try:
             frames, price = fetch(sym, tfs)
@@ -52,14 +52,21 @@ def run() -> int:
         if recent and time.time() - max(recent) < cfg.SYMBOL_COOLDOWN_HOURS * 3600:
             print(f"· {sym['name']}: yaqinda signal berilgan, kutish vaqti tugamagan")
             continue
+        candidates.append(sig)
+
+    # Asosiy (⭐ BTC/ETH) birinchi, keyin sabablari ko'p bo'lganlari
+    candidates.sort(key=lambda s: (not s.symbol.startswith("⭐"), -s.score))
+    sent = 0
+    for sig in candidates[: cfg.MAX_SIGNALS_PER_RUN]:
         if send(format_signal(sig)):
             state[sig.key] = time.time()
             sent += 1
-            print(f"✅ {sym['name']}: signal yuborildi")
+            print(f"✅ {sig.symbol}: signal yuborildi ({sig.score} ta sabab)")
+    for sig in candidates[cfg.MAX_SIGNALS_PER_RUN:]:
+        print(f"· {sig.symbol}: limit tufayli yuborilmadi ({sig.score} ta sabab)")
     save_state(state)
     print(f"Tayyor. Yuborilgan signallar: {sent}")
     return sent
-
 
 if __name__ == "__main__":
     run()

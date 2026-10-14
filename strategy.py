@@ -189,9 +189,19 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
         return None
 
     # 4) Stop — tasdiqdan oldingi eng past low ostida
-    stop = min(b.pullback_low for b in breaks) - cfg.STOP_BUFFER_ATR * atr5
+    # Stop kamida 0.3×ATR(4H) uzoqlikda — juda yaqin stop shovqindan urilib ketadi
+    stop = min(min(b.pullback_low for b in breaks) - cfg.STOP_BUFFER_ATR * atr5,
+               price - cfg.MIN_STOP_ATR_4H * atr4h)
     if stop >= price:
         return None
+    risk = price - stop
+
+    # Katta TF taklif zonasi (1W/1D) yaqin tepada yoki narx uning ichida bo'lsa — buy qilinmaydi
+    for z in zones:
+        if z.side == "bear" and z.tf in cfg.BLOCKING_TFS and (
+            z.bottom <= price < z.top or price < z.bottom < price + cfg.BLOCK_WITHIN_R * risk
+        ):
+            return None
 
     # 5) MAJBURIY: TP — yuqoridagi zonalar, resistance va high'lar, RR >= 1:3
     targets = _targets(price, stop, frames, zones, merge_tol=0.25 * atr4h)
@@ -203,7 +213,7 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
     kinds = sorted({b.kind for b in breaks}, reverse=True)  # CHoCH birinchi
     tfs = ", ".join(b.tf for b in breaks)
     reasons.append(f"{' / '.join(kinds)} tasdig'i ({tfs})")
-    if len(breaks) >= 2:
+    if len(breaks) >= 2 and any(b.tf == "15m" for b in breaks):  # 10m 5m dan yasaladi, 15m mustaqil
         reasons.append("Bir nechta timeframe'da tasdiq")
     major_liq = any(z.kind == "LIQ" for z in active)
     if major_liq and any(b.kind == "CHoCH" for b in breaks):
@@ -233,11 +243,15 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
 
 
 def fmt(x: float) -> str:
-    """Narxni o'qishga qulay formatlash."""
+    """Narxni koinga mos aniqlikda formatlash (BTC 65 432.1, LINK 12.873, XRP 1.3742)."""
     if x >= 1000:
         s = f"{x:,.1f}"
-    elif x >= 1:
+    elif x >= 100:
         s = f"{x:,.2f}"
+    elif x >= 10:
+        s = f"{x:,.3f}"
+    elif x >= 1:
+        s = f"{x:,.4f}"
     else:
         s = f"{x:.5f}"
     return s.replace(",", " ")

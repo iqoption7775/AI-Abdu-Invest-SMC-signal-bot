@@ -33,6 +33,10 @@ MIN_RR = 3.0              # Risk/Reward kamida 1:3
 MIN_REASONS = 3           # Kamida nechta sabab bir vaqtda mos kelsa signal chiqadi
 SR_MIN_TOUCHES = 2        # Support/Resistance zonasi uchun kamida necha marta tegish
 MAX_TARGETS = 3           # Nechta take-profit ko'rsatiladi
+MIN_STOP_ATR_4H = 0.3     # Stop kirishdan kamida 0.3×ATR(4H) pastda (shovqindan himoya)
+BLOCKING_TFS = ["1W", "1D"]  # Shu TF'dagi taklif zonasi (bearish FVG/OB, resistance) ...
+BLOCK_WITHIN_R = 1.0      # ... kirishdan 1R ichida yoki narx uning ichida bo'lsa — signal yo'q
+MAX_SIGNALS_PER_RUN = 3   # Bir tekshiruvda ko'pi bilan nechta signal (BTC/ETH birinchi, keyin eng kuchlilari)
 
 ZONE_TOUCH_HOURS = 3      # Narx zonaga oxirgi necha soat ichida tekkan bo'lishi kerak
 BREAK_LOOKBACK_HOURS = 3  # BOS/CHoCH oxirgi necha soat ichida bo'lgan bo'lishi kerak

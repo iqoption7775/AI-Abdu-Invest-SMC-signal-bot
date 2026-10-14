@@ -18,12 +18,15 @@ def format_signal(s: Signal) -> str:
         f"🟢 <b>BUY SIGNAL — {s.symbol}</b>",
         f"<i>{cfg.BRAND}</i>",
         "",
-        f"📍 <b>Kirish:</b> {fmt(s.entry)}",
+        f"📍 <b>Kirish:</b> {fmt(s.entry)}" + ("  (limit — zona tepasi)" if s.limit else ""),
         f"🛑 <b>Stop:</b> {fmt(s.stop)}  (−{risk_pct:.2f}%)",
     ]
+    if s.anchor is not None:
+        lines.append(f"      └ {s.anchor.label()} ({fmt(s.anchor.bottom)} – {fmt(s.anchor.top)}) ostida")
     for i, t in enumerate(s.targets, 1):
         pct = (t.price - s.entry) / s.entry * 100
-        lines.append(f"🎯 <b>TP{i}:</b> {fmt(t.price)}  (+{pct:.2f}% · RR 1:{t.rr:.1f})")
+        note = "  — qisman foyda" if i == 1 and len(s.targets) > 1 else ""
+        lines.append(f"🎯 <b>TP{i}:</b> {fmt(t.price)}  (+{pct:.2f}% · RR 1:{t.rr:.1f}){note}")
         lines.append(f"      └ {t.reason}")
     lines += ["", f"💪 <b>Kuch:</b> {s.strength} — {s.score} ta sabab mos keldi", "", "🧠 <b>Sabablar:</b>"]
     lines += [f"• {r}" for r in s.reasons]

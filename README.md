@@ -11,7 +11,13 @@ Bot hamma sabablarni kutmaydi: **istalgan 3 ta sabab bir vaqtda mos kelsa** sign
 **Majburiy shartlar** (bularsiz signal yo'q):
 1. Narx biror talab hududiga tekkan — FVG, Order Block, Support, Fibonacci OTE yoki **katta likvidlik olingan joy (bank buy zonasi)** — 1W / 1D / 4H, qaysi biri bo'lsa ham.
 2. Zonaga tekkandan keyin 5m / 10m / 15m da **CHoCH yoki BOS** tasdig'i.
-3. **RR kamida 1:3** — TP'lar yuqoridagi to'ldirilmagan FVG/OB, resistance zonalari, PDH/PWH va swing high'lar (buy-side likvidlik).
+3. **Oxirgi TP kamida 1:3 RR.**
+
+**Kirish / stop / TP (treyder modeli):**
+- **Kirish** — zona tepasida (narx zonadan chiqib ketgan bo'lsa — limit), zona ichida bo'lsa — joriy narx.
+- **Stop** — zona **ostida** (kengligi ≤ 3×ATR(4H) bo'lgan 4H/1D FVG, OB yoki support), kamida 0.75×ATR(4H).
+- TP soni vaziyatga qarab **1–3 ta**: **TP1** — eng yaqin qarshilik (≥ 1R, qisman foyda), **TP2** — oraliq likvidlik (faqat alohida daraja bo'lsa), oxirgi TP — birinchi ≥ 1:3 maqsad.
+  High va likvidlik darajalariga TP biroz oldinroq qo'yiladi.
 
 **Sabablar** (har biri 1 ta; majburiy zona va tasdiq ham sabab hisoblanadi):
 - Bullish FVG / Order Block (1W, 1D, 4H)
@@ -28,10 +34,10 @@ Bot hamma sabablarni kutmaydi: **istalgan 3 ta sabab bir vaqtda mos kelsa** sign
 - Narx 4H EMA50 ustida, narx 1D diapazonning discount qismida
 
 **Kuch:** 3 sabab — O'rta, 4–5 — Kuchli, 6+ — Juda kuchli.
-**Stop:** tasdiqdan oldingi eng past low ostida. TP1 gacha qarshilik zonalari ogohlantirish sifatida ko'rsatiladi.
-Bitta tasdiq bo'yicha signal bir marta yuboriladi, bitta juftlikdan 4 soat ichida yangi signal chiqmaydi.
+Bitta tasdiq bo'yicha signal bir marta yuboriladi; bitta juftlikdan 4 soat, umuman esa 2 soat ichida yangi signal chiqmaydi;
+bir martada ko'pi bilan 2 ta signal (⭐ BTC/ETH birinchi). 1W/1D taklif zonasi kirishdan 1R ichida bo'lsa — signal yo'q.
 
-Juftliklar va qoidalar `config.py` da o'zgartiriladi (standart: BTC, ETH, SOL, Oltin).
+Juftliklar va qoidalar `config.py` da o'zgartiriladi (⭐ BTC, ⭐ ETH + 11 ta altkoin).
 
 ## O'rnatish (telefondan ~10 daqiqa)
 

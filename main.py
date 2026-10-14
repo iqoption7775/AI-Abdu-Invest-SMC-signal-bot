@@ -56,6 +56,13 @@ def run() -> int:
 
     # Asosiy (⭐ BTC/ETH) birinchi, keyin sabablari ko'p bo'lganlari
     candidates.sort(key=lambda s: (not s.symbol.startswith("⭐"), -s.score))
+
+    # Koinlar birga harakatlanadi: yaqinda signal berilgan bo'lsa, yangi to'lqin kutiladi
+    last_any = max(state.values(), default=0)
+    if candidates and time.time() - last_any < cfg.GLOBAL_COOLDOWN_HOURS * 3600:
+        for sig in candidates:
+            print(f"· {sig.symbol}: umumiy kutish vaqti ({cfg.GLOBAL_COOLDOWN_HOURS} soat) tugamagan")
+        candidates = []
     sent = 0
     for sig in candidates[: cfg.MAX_SIGNALS_PER_RUN]:
         if send(format_signal(sig)):

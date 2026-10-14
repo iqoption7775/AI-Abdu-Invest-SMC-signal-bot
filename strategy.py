@@ -4,7 +4,8 @@ Majburiy (bularsiz signal bo'lmaydi):
   1. Narx istalgan talab hududiga tekkan: FVG, Order Block, Support, Fibonacci OTE yoki
      katta likvidlik olingan joy — "bank buy zonasi" (1W / 1D / 4H — qaysi biri bo'lsa ham).
   2. Kichik timeframe'da (5m/10m/15m) BOS yoki CHoCH tasdig'i.
-  3. Risk/Reward kamida 1:3.
+  3. Oxirgi TP kamida 1:3 RR. Kirish — zona tepasi, stop — zona ostida (treyder modeli):
+     TP1 yaqin qarshilik (qisman foyda), TP2 likvidlikdan oldin, TP3 ≥ 1:3.
 
 Qolgani — sabablar. Kamida MIN_REASONS ta sabab bir vaqtda mos kelsa, signal chiqadi.
 Majburiy shartlarning o'zi ham sabab hisoblanadi (zona + tasdiq = 2 ta sabab).
@@ -39,6 +40,8 @@ class Signal:
     breaks: list[Break]
     reasons: list[str] = field(default_factory=list)
     obstacles: list[Zone] = field(default_factory=list)  # TP1 gacha yo'ldagi qarshilik zonalari
+    anchor: Zone | None = None   # stop qaysi zona ostiga qo'yilgan
+    limit: bool = False          # kirish — zona tepasida limit buyurtma
 
     @property
     def score(self) -> int:
@@ -71,7 +74,13 @@ def _active(zones: list[Zone], ltf: pd.DataFrame, price: float, tol: float) -> l
     return out
 
 
-def _targets(entry: float, stop: float, frames: dict, zones: list[Zone], merge_tol: float) -> list[Target]:
+def _targets(entry: float, stop: float, frames: dict, zones: list[Zone], merge_tol: float,
+             frontrun: float) -> list[Target]:
+    """TP1 — eng yaqin qarshilik (≥ MIN_TP1_RR), TP3 — birinchi ≥ MIN_RR maqsad, TP2 — ular orasida.
+
+    High va likvidlik darajalariga TP biroz oldinroq qo'yiladi (narx ko'pincha unga yetmay qaytadi).
+    Oxirgi TP 1:3 ga yetmasa — bo'sh ro'yxat (signal yo'q).
+    """
     risk = entry - stop
     cands: list[tuple[float, str]] = []
     for z in zones:
@@ -79,23 +88,50 @@ def _targets(entry: float, stop: float, frames: dict, zones: list[Zone], merge_t
             why = f"{z.label()} ({z.touches} marta tegilgan)" if z.kind == "SR" else f"{z.label()} (to'ldirilmagan)"
             cands.append((z.bottom, why))
     for tf, name in (("1D", "PDH (oldingi kun high'i)"), ("1W", "PWH (oldingi hafta high'i)")):
-        high = float(frames[tf]["high"].iloc[-1])
+        high = float(frames[tf]["high"].iloc[-1]) - frontrun
         if high > entry:
-            cands.append((high, f"{name} — buy-side likvidlik"))
+            cands.append((high, f"{name} oldidan — buy-side likvidlik"))
     for tf in cfg.HTF_TIMEFRAMES:
         df = frames[tf]
         sh, _ = swing_points(df, cfg.SWING_LEN)
         for p in df["high"].to_numpy()[sh][-15:]:
-            if p > entry:
-                cands.append((float(p), f"{tf} swing high (likvidlik)"))
+            if p - frontrun > entry:
+                cands.append((float(p) - frontrun, f"{tf} swing high oldidan (likvidlik)"))
     cands.sort()
     merged: list[tuple[float, str]] = []
     for p, why in cands:  # bir-biriga juda yaqin darajalarni birlashtiramiz
         if merged and p - merged[-1][0] < merge_tol:
             continue
         merged.append((p, why))
-    out = [Target(p, (p - entry) / risk, why) for p, why in merged]
-    return [t for t in out if t.rr >= cfg.MIN_RR][: cfg.MAX_TARGETS]
+    levels = [Target(p, (p - entry) / risk, why) for p, why in merged]
+    levels = [t for t in levels if t.rr >= cfg.MIN_TP1_RR]
+    final = next((t for t in levels if t.rr >= cfg.MIN_RR), None)
+    if final is None:
+        return []
+    before = [t for t in levels if t.price < final.price]
+    if not before:
+        return [final]
+    tp1 = before[0]
+    if cfg.MAX_TARGETS < 2:
+        return [final]
+    # TP2 faqat haqiqiy oraliq daraja bo'lsa (TP1 va oxirgi TP dan kamida MIN_TP_GAP_R uzoqda)
+    gap = cfg.MIN_TP_GAP_R
+    middle = [t for t in before[1:] if t.rr - tp1.rr >= gap and final.rr - t.rr >= gap]
+    if not middle or cfg.MAX_TARGETS < 3:
+        return [tp1, final]
+    mid_rr = (tp1.rr + final.rr) / 2
+    tp2 = min(middle, key=lambda t: abs(t.rr - mid_rr))
+    return [tp1, tp2, final]
+
+
+def _anchor_zone(active: list[Zone], atr4h: float) -> Zone | None:
+    """Stop qo'yiladigan zona: tor (≤ ANCHOR_MAX_ATR_4H) FVG/OB/support; kichik TF va tor zona afzal."""
+    cands = [z for z in active if z.kind in ("FVG", "OB", "SR")
+             and z.top - z.bottom <= cfg.ANCHOR_MAX_ATR_4H * atr4h]
+    if not cands:
+        return None
+    order = {"4H": 0, "1D": 1, "1W": 2}
+    return min(cands, key=lambda z: (order.get(z.tf, 3), z.top - z.bottom))
 
 
 def _zone_reason(z: Zone, active: list[Zone]) -> str:
@@ -149,10 +185,16 @@ def _round_number(touch_low: float, tol: float) -> str | None:
     return None
 
 
+def _deep_enough(z: Zone, touch_low: float, atr4h: float) -> bool:
+    """Keng zona (> WIDE_ZONE_ATR_4H × ATR4H) uchun narx kamida uning yarmigacha (CE) tushgan bo'lishi kerak."""
+    if z.kind in ("LIQ", "OTE") or z.top - z.bottom <= cfg.WIDE_ZONE_ATR_4H * atr4h:
+        return True
+    return touch_low <= (z.top + z.bottom) / 2
+
+
 # ------------------------------------------------------------------ asosiy tahlil
 def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signal | None:
     atr4h = float(atr(frames["4H"]).iloc[-1])
-    atr5 = float(atr(frames["5m"]).iloc[-1])
     atr15 = float(atr(frames["15m"]).iloc[-1])
 
     # 1) Barcha hududlar: FVG/OB (1W/1D/4H), Support/Resistance (1D/4H), Fibonacci OTE (1D/4H)
@@ -182,29 +224,41 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
     first_touch = min(t for _, t in active_pairs)
     touch_low = float(frames["5m"].loc[frames["5m"].index >= first_touch, "low"].min())
 
+    # Keng zonaning faqat tepa chetiga tegish yetarli emas — narx zona yarmigacha (CE) tushgan bo'lishi kerak
+    active = [z for z in active if _deep_enough(z, touch_low, atr4h)]
+    if not active:
+        return None
+
     # 3) MAJBURIY: 5m/10m/15m da BOS yoki CHoCH (zonaga tekkandan keyin)
     since = max(first_touch, frames["5m"].index[-1] - pd.Timedelta(hours=cfg.BREAK_LOOKBACK_HOURS))
     breaks = [b for tf in cfg.LTF_TIMEFRAMES if (b := bullish_break(frames[tf], tf, cfg.SWING_LEN, since))]
     if not breaks:
         return None
 
-    # 4) Stop — tasdiqdan oldingi eng past low ostida
-    # Stop kamida 0.3×ATR(4H) uzoqlikda — juda yaqin stop shovqindan urilib ketadi
-    stop = min(min(b.pullback_low for b in breaks) - cfg.STOP_BUFFER_ATR * atr5,
-               price - cfg.MIN_STOP_ATR_4H * atr4h)
-    if stop >= price:
+    # 4) Kirish va stop — treyder modeli: kirish zona tepasida, stop zona OSTIDA.
+    #    Zona 4H/1D/1W dan olingan, shuning uchun stop 5m shovqiniga emas, zonaga va 4H ATR ga bog'lanadi.
+    anchor = _anchor_zone(active, atr4h)
+    entry, limit = price, False
+    if anchor is not None and price > anchor.top:
+        entry, limit = anchor.top, True  # narx zonadan biroz chiqib ketgan — zona tepasida limit kirish
+    structural_low = min(touch_low, min(b.pullback_low for b in breaks))
+    stop = min(structural_low - cfg.STOP_BELOW_LOW_ATR_4H * atr4h,
+               entry - cfg.MIN_STOP_ATR_4H * atr4h)
+    if anchor is not None:
+        stop = min(stop, anchor.bottom - cfg.STOP_BELOW_ZONE_ATR_4H * atr4h)
+    if stop >= entry:
         return None
-    risk = price - stop
+    risk = entry - stop
 
     # Katta TF taklif zonasi (1W/1D) yaqin tepada yoki narx uning ichida bo'lsa — buy qilinmaydi
     for z in zones:
         if z.side == "bear" and z.tf in cfg.BLOCKING_TFS and (
-            z.bottom <= price < z.top or price < z.bottom < price + cfg.BLOCK_WITHIN_R * risk
+            z.bottom <= entry < z.top or entry < z.bottom < entry + cfg.BLOCK_WITHIN_R * risk
         ):
             return None
 
-    # 5) MAJBURIY: TP — yuqoridagi zonalar, resistance va high'lar, RR >= 1:3
-    targets = _targets(price, stop, frames, zones, merge_tol=0.25 * atr4h)
+    # 5) MAJBURIY: TP1 yaqin qarshilik, TP2 likvidlikdan oldin, oxirgi TP RR >= 1:3
+    targets = _targets(entry, stop, frames, zones, merge_tol=0.25 * atr4h, frontrun=cfg.FRONTRUN_ATR_4H * atr4h)
     if not targets:
         return None
 
@@ -236,10 +290,10 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
     if len(reasons) < cfg.MIN_REASONS:
         return None
     obstacles = sorted(
-        (z for z in zones if z.side == "bear" and price < z.bottom < targets[0].price),
+        (z for z in zones if z.side == "bear" and entry < z.bottom < targets[0].price),
         key=lambda z: z.bottom,
     )
-    return Signal(symbol, price, stop, targets, active, breaks, reasons, obstacles)
+    return Signal(symbol, entry, stop, targets, active, breaks, reasons, obstacles, anchor, limit)
 
 
 def fmt(x: float) -> str:

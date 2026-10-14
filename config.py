@@ -5,12 +5,22 @@ Bu faylni o'zgartirib, juftliklar va strategiya parametrlarini sozlaysiz.
 
 # Kuzatiladigan juftliklar.
 #   source="kraken" -> kripto (Kraken birjasining ochiq ma'lumoti, kalit shart emas)
-#   source="yahoo"  -> oltin, forex, indekslar (Yahoo Finance)
 SYMBOLS = [
-    {"name": "BTC/USD", "source": "kraken", "ticker": "XBTUSD"},
-    {"name": "ETH/USD", "source": "kraken", "ticker": "ETHUSD"},
+    # Asosiy
+    {"name": "⭐ BTC/USD", "source": "kraken", "ticker": "XBTUSD"},
+    {"name": "⭐ ETH/USD", "source": "kraken", "ticker": "ETHUSD"},
+    # Qo'shimcha
     {"name": "SOL/USD", "source": "kraken", "ticker": "SOLUSD"},
-    {"name": "XAU/USD (Oltin)", "source": "yahoo", "ticker": "GC=F"},
+    {"name": "XRP/USD", "source": "kraken", "ticker": "XRPUSD"},
+    {"name": "ADA/USD", "source": "kraken", "ticker": "ADAUSD"},
+    {"name": "AVAX/USD", "source": "kraken", "ticker": "AVAXUSD"},
+    {"name": "LINK/USD", "source": "kraken", "ticker": "LINKUSD"},
+    {"name": "DOT/USD", "source": "kraken", "ticker": "DOTUSD"},
+    {"name": "LTC/USD", "source": "kraken", "ticker": "LTCUSD"},
+    {"name": "XLM/USD", "source": "kraken", "ticker": "XLMUSD"},
+    {"name": "NEAR/USD", "source": "kraken", "ticker": "NEARUSD"},
+    {"name": "ATOM/USD", "source": "kraken", "ticker": "ATOMUSD"},
+    {"name": "ALGO/USD", "source": "kraken", "ticker": "ALGOUSD"},
 ]
 
 # --- Strategiya qoidalari ---

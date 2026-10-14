@@ -41,9 +41,14 @@ def resample(df: pd.DataFrame, rule: str) -> pd.DataFrame:
 
 # ---------------------------------------------------------------- Kraken
 def _kraken(ticker: str, minutes: int) -> pd.DataFrame:
-    js = _get("https://api.kraken.com/0/public/OHLC", {"pair": ticker, "interval": minutes})
-    if js.get("error"):
-        raise RuntimeError(f"Kraken xatosi: {js['error']}")
+    for attempt in range(4):
+        time.sleep(1.2)  # Kraken limitiga tushmaslik uchun so'rovlar orasida pauza
+        js = _get("https://api.kraken.com/0/public/OHLC", {"pair": ticker, "interval": minutes})
+        if not js.get("error"):
+            break
+        if "Too many requests" not in str(js["error"]) or attempt == 3:
+            raise RuntimeError(f"Kraken xatosi ({ticker}): {js['error']}")
+        time.sleep(5 * (attempt + 1))
     key = next(k for k in js["result"] if k != "last")
     rows = js["result"][key]
     df = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "vwap", "volume", "count"])

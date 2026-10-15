@@ -4,7 +4,8 @@ Majburiy (bularsiz signal bo'lmaydi):
   1. Narx istalgan talab hududiga tekkan: FVG, Order Block, Support, Fibonacci OTE yoki
      katta likvidlik olingan joy — "bank buy zonasi" (1W / 1D / 4H — qaysi biri bo'lsa ham).
   2. Kichik timeframe'da (5m/10m/15m) BOS yoki CHoCH tasdig'i.
-  3. Oxirgi TP kamida 1:3 RR. Kirish — zona tepasi, stop — zona ostida (treyder modeli):
+  3. Likvidlik olingan (sweep) va CHoCH/BOS undan keyin bo'lgan (REQUIRE_SWEEP).
+  4. Oxirgi TP kamida 1:3 RR. Kirish — zona tepasi, stop — zona ostida (treyder modeli):
      TP1 yaqin qarshilik (qisman foyda), TP2 likvidlikdan oldin, TP3 ≥ 1:3.
 
 Qolgani — sabablar. Kamida MIN_REASONS ta sabab bir vaqtda mos kelsa, signal chiqadi.
@@ -18,7 +19,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 import config as cfg
-from liquidity import swept_zones
+from liquidity import find_pools, swept_zones
 from smc import (Break, Zone, atr, bullish_break, ema, htf_zones, last_bullish_leg,
                  sr_zones, swing_points)
 
@@ -42,6 +43,7 @@ class Signal:
     obstacles: list[Zone] = field(default_factory=list)  # TP1 gacha yo'ldagi qarshilik zonalari
     anchor: Zone | None = None   # stop qaysi zona ostiga qo'yilgan
     limit: bool = False          # kirish — zona tepasida limit buyurtma
+    stop_reason: str = ""        # stop nima ostiga qo'yilgani (xabarda ko'rsatiladi)
 
     @property
     def score(self) -> int:
@@ -141,6 +143,8 @@ def _zone_reason(z: Zone, active: list[Zone]) -> str:
                 f"narx qaytib chiqdi (bank buy zonasi)")
     if z.kind == "SR":
         text += f" — {z.touches} marta tegilgan"
+        if z.note == "swept":
+            text += ", ostidagi stoplar olindi (sweep)"
         if z.flipped:
             text += ", S/R flip (eski resistance endi support)"
     if z.kind == "OTE" and any(o.kind in ("FVG", "OB") and o.bottom <= z.top and o.top >= z.bottom for o in active):
@@ -192,6 +196,54 @@ def _deep_enough(z: Zone, touch_low: float, atr4h: float) -> bool:
     return touch_low <= (z.top + z.bottom) / 2
 
 
+def _trend_4h(frames: dict, price: float) -> str | None:
+    """4H trend yuqoriga bo'lsa — sabab matni, pasayishda bo'lsa — None (buy yo'q).
+
+    Yuqoriga: narx 4H EMA50 ustida va EMA50 ko'tarilmoqda, YOKI so'nggi kunlarda 4H da bullish
+    sinish (CHoCH/BOS) bo'lgan — ya'ni pasayish trendi buzilgan.
+    """
+    e50 = ema(frames["4H"]["close"], 50)
+    if price > float(e50.iloc[-1]) and float(e50.iloc[-1]) > float(e50.iloc[-7]):
+        return "4H trend yuqoriga (narx EMA50 ustida, EMA50 ko'tarilmoqda)"
+    f4 = frames["4H"]
+    since = f4.index[-min(cfg.TREND_CHOCH_4H_BARS, len(f4))]
+    b = bullish_break(f4, "4H", cfg.SWING_LEN, since)
+    if b is not None:
+        return f"4H {b.kind} — trend yuqoriga burildi ({fmt(b.level)} sindirildi)"
+    return None
+
+
+def _liquidity_ok(z: Zone, touch_low: float, price: float) -> bool:
+    """3+ marta tegilgan support faqat sweep'dan keyin (narx ostiga tushib, qaytib chiqqan) hisoblanadi."""
+    if z.kind != "SR" or z.touches < cfg.SR_LIQUIDITY_TOUCHES:
+        return True
+    if touch_low < z.bottom < price:
+        z.note = "swept"
+        return True
+    return False
+
+
+def _sweep(active: list[Zone], touch_low: float, price: float) -> Zone | None:
+    """Likvidlik olinganmi: katta hovuz (PDL/PWL, swing low, teng low'lar) yoki support (2+ tegish)
+    ostiga tushilib, narx qaytib chiqqan bo'lsa — o'sha zona, aks holda None."""
+    for z in active:
+        if z.kind == "LIQ":
+            return z
+    for z in active:
+        if z.kind == "SR" and z.touches >= 2 and touch_low < z.bottom < price:
+            z.note = "swept"
+            return z
+    return None
+
+
+def _sell_side_levels(frames: dict, zones: list[Zone]) -> list[tuple[float, str]]:
+    """Stoplar to'planadigan darajalar: PDL/PWL, swing low'lar, teng low'lar, ko'p tegilgan support."""
+    out = [(p.level, p.name) for p in find_pools(frames, cfg.SWING_LEN)]
+    out += [(z.bottom, f"{z.tf} support ({z.touches} marta tegilgan)")
+            for z in zones if z.kind == "SR" and z.side == "bull" and z.touches >= 2]
+    return out
+
+
 # ------------------------------------------------------------------ asosiy tahlil
 def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signal | None:
     atr4h = float(atr(frames["4H"]).iloc[-1])
@@ -226,13 +278,30 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
 
     # Keng zonaning faqat tepa chetiga tegish yetarli emas — narx zona yarmigacha (CE) tushgan bo'lishi kerak
     active = [z for z in active if _deep_enough(z, touch_low, atr4h)]
+
+    # Ko'p (3+) marta tegilgan support — kuchli zona emas, ostida stoplar to'plangan likvidlik.
+    # Bunday zona faqat narx uning ostiga tushib (stoplarni olib) qaytib chiqqandan keyin hisoblanadi.
+    active = [z for z in active if _liquidity_ok(z, touch_low, price)]
     if not active:
         return None
+
+    # Klassik SMC modeli: avval likvidlik olinadi (sweep), keyin CHoCH, keyin kirish.
+    swept = _sweep(active, touch_low, price)
+    if cfg.REQUIRE_SWEEP and swept is None:
+        return None
+    sweep_time = frames["5m"].loc[frames["5m"].index >= first_touch, "low"].idxmin()
 
     # 3) MAJBURIY: 5m/10m/15m da BOS yoki CHoCH (zonaga tekkandan keyin)
     since = max(first_touch, frames["5m"].index[-1] - pd.Timedelta(hours=cfg.BREAK_LOOKBACK_HOURS))
     breaks = [b for tf in cfg.LTF_TIMEFRAMES if (b := bullish_break(frames[tf], tf, cfg.SWING_LEN, since))]
+    if cfg.REQUIRE_SWEEP:
+        breaks = [b for b in breaks if b.time > sweep_time]  # CHoCH/BOS sweep'dan KEYIN bo'lishi shart
     if not breaks:
+        return None
+
+    # 4H trend filtri: pasayish trendida buy yo'q (faqat 4H CHoCH dan keyin)
+    trend_reason = _trend_4h(frames, price)
+    if cfg.REQUIRE_4H_UPTREND and trend_reason is None:
         return None
 
     # 4) Kirish va stop — treyder modeli: kirish zona tepasida, stop zona OSTIDA.
@@ -244,8 +313,20 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
     structural_low = min(touch_low, min(b.pullback_low for b in breaks))
     stop = min(structural_low - cfg.STOP_BELOW_LOW_ATR_4H * atr4h,
                entry - cfg.MIN_STOP_ATR_4H * atr4h)
+    stop_reason = "zona reaksiyasining eng past nuqtasi ostida"
     if anchor is not None:
         stop = min(stop, anchor.bottom - cfg.STOP_BELOW_ZONE_ATR_4H * atr4h)
+        stop_reason = f"{anchor.label()} ({fmt(anchor.bottom)} – {fmt(anchor.top)}) ostida"
+
+    # Stop olinmagan likvidlik ustida yoki uning yonida qolmasin — aks holda uni "ovlashadi".
+    # Reaksiya low'idan pastdagi (hali urilmagan) hovuz stopga yaqin bo'lsa, stop uning ostiga tushadi.
+    pools = [(lvl, name) for lvl, name in _sell_side_levels(frames, zones)
+             if stop - cfg.LIQ_NEAR_STOP_ATR_4H * atr4h < lvl < touch_low]
+    if pools:
+        lvl, name = min(pools)
+        if lvl - cfg.STOP_BELOW_LOW_ATR_4H * atr4h < stop:
+            stop = lvl - cfg.STOP_BELOW_LOW_ATR_4H * atr4h
+            stop_reason = f"likvidlik ostida: {name} — {fmt(lvl)} (stop ovlanmasligi uchun)"
     if stop >= entry:
         return None
     risk = entry - stop
@@ -280,8 +361,8 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
     ):
         if extra:
             reasons.append(extra)
-    if price > float(ema(frames["4H"]["close"], 50).iloc[-1]):
-        reasons.append("Narx 4H EMA50 dan yuqorida (trend yuqoriga)")
+    if trend_reason:
+        reasons.append(trend_reason)
     d = frames["1D"].iloc[-30:]
     lo, hi = d["low"].min(), d["high"].max()
     if hi > lo and price < lo + 0.5 * (hi - lo):
@@ -293,7 +374,7 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
         (z for z in zones if z.side == "bear" and entry < z.bottom < targets[0].price),
         key=lambda z: z.bottom,
     )
-    return Signal(symbol, entry, stop, targets, active, breaks, reasons, obstacles, anchor, limit)
+    return Signal(symbol, entry, stop, targets, active, breaks, reasons, obstacles, anchor, limit, stop_reason)
 
 
 def fmt(x: float) -> str:

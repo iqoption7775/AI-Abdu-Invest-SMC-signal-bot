@@ -12,6 +12,18 @@ Bot hamma sabablarni kutmaydi: **istalgan 3 ta sabab bir vaqtda mos kelsa** sign
 1. Narx biror talab hududiga tekkan — FVG, Order Block, Support, Fibonacci OTE yoki **katta likvidlik olingan joy (bank buy zonasi)** — 1W / 1D / 4H, qaysi biri bo'lsa ham.
 2. Zonaga tekkandan keyin 5m / 10m / 15m da **CHoCH yoki BOS** tasdig'i.
 3. **Oxirgi TP kamida 1:3 RR.**
+4. **4H trend yuqoriga** — narx 4H EMA50 ustida va EMA50 ko'tarilmoqda, yoki so'nggi sutkada 4H da bullish CHoCH/BOS.
+   Pasayish trendida buy signal berilmaydi.
+
+**Klassik SMC modeli (majburiy):** avval **likvidlik olinadi** — PDL/PWL, 1D/4H swing low, teng low'lar yoki
+support ostiga tushilib, narx qaytib chiqadi; keyin **CHoCH/BOS** (sweep'dan keyin); keyin FVG/OB'dan kirish.
+Stop sweep soyasi ostida. FVG yoki OB'ga tegishning o'zi yetarli emas.
+
+**Likvidlik qoidalari (15-oktabr):**
+- 3+ marta tegilgan support — kuchli zona emas, ostida stoplar to'plangan **likvidlik**. Bunday zona faqat narx
+  uning ostiga tushib (sweep) qaytib chiqqandan keyin hisoblanadi.
+- Stop yonida hali urilmagan likvidlik (PDL/PWL, swing low, teng low'lar, ko'p tegilgan support) bo'lsa —
+  stop uning **ostiga** qo'yiladi. Shunda RR 1:3 ga yetmasa, signal berilmaydi.
 
 **Kirish / stop / TP (treyder modeli):**
 - **Kirish** — zona tepasida (narx zonadan chiqib ketgan bo'lsa — limit), zona ichida bo'lsa — joriy narx.

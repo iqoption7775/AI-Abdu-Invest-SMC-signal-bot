@@ -21,8 +21,8 @@ def format_signal(s: Signal) -> str:
         f"📍 <b>Kirish:</b> {fmt(s.entry)}" + ("  (limit — zona tepasi)" if s.limit else ""),
         f"🛑 <b>Stop:</b> {fmt(s.stop)}  (−{risk_pct:.2f}%)",
     ]
-    if s.anchor is not None:
-        lines.append(f"      └ {s.anchor.label()} ({fmt(s.anchor.bottom)} – {fmt(s.anchor.top)}) ostida")
+    if s.stop_reason:
+        lines.append(f"      └ {s.stop_reason}")
     for i, t in enumerate(s.targets, 1):
         pct = (t.price - s.entry) / s.entry * 100
         note = "  — qisman foyda" if i == 1 and len(s.targets) > 1 else ""

@@ -46,6 +46,13 @@ BLOCK_WITHIN_R = 1.0      # ... kirishdan 1R ichida yoki narx uning ichida bo'ls
 MAX_SIGNALS_PER_RUN = 2   # Bir tekshiruvda ko'pi bilan nechta signal (BTC/ETH birinchi, keyin eng kuchlilari)
 GLOBAL_COOLDOWN_HOURS = 2 # Har qanday signaldan keyin shuncha soat yangi signal yo'q (koinlar birga harakatlanadi)
 
+REQUIRE_4H_UPTREND = True  # Pasayish trendida buy yo'q: narx 4H EMA50 ustida va EMA50 ko'tarilmoqda,
+                           # yoki so'nggi TREND_CHOCH_4H_BARS ta 4H shamda bullish CHoCH/BOS bo'lgan
+TREND_CHOCH_4H_BARS = 6    # 6 ta 4H sham = 1 sutka
+REQUIRE_SWEEP = True       # Klassik SMC: likvidlik olinishi (sweep) majburiy, CHoCH/BOS undan keyin bo'lishi shart
+SR_LIQUIDITY_TOUCHES = 3   # Shuncha va ko'p tegilgan support — likvidlik: faqat sweep'dan keyin kirish
+LIQ_NEAR_STOP_ATR_4H = 0.3 # Stopdan shu masofadagi urilmagan likvidlik bo'lsa — stop uning ostiga tushadi
+
 ZONE_TOUCH_HOURS = 3      # Narx zonaga oxirgi necha soat ichida tekkan bo'lishi kerak
 BREAK_LOOKBACK_HOURS = 3  # BOS/CHoCH oxirgi necha soat ichida bo'lgan bo'lishi kerak
 SWING_LEN = 2             # Swing high/low aniqlash uchun har ikki tomondagi shamlar soni

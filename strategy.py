@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 import config as cfg
+from data import resample
 from liquidity import find_pools, swept_zones
 from smc import (Break, Zone, atr, bullish_break, ema, htf_zones, last_bullish_leg,
                  sr_zones, swing_points)
@@ -237,11 +238,81 @@ def _sweep(active: list[Zone], touch_low: float, price: float) -> Zone | None:
 
 
 def _sell_side_levels(frames: dict, zones: list[Zone]) -> list[tuple[float, str]]:
-    """Stoplar to'planadigan darajalar: PDL/PWL, swing low'lar, teng low'lar, ko'p tegilgan support."""
+    """Stoplar to'planadigan darajalar: PDL/PWL, 1D/4H/1H swing low'lar, teng low'lar, ko'p tegilgan support."""
     out = [(p.level, p.name) for p in find_pools(frames, cfg.SWING_LEN)]
     out += [(z.bottom, f"{z.tf} support ({z.touches} marta tegilgan)")
             for z in zones if z.kind == "SR" and z.side == "bull" and z.touches >= 2]
+    # 1H swing low'lar (15m dan yasaladi) — kichik, lekin hammaga ko'rinadigan stop joylari
+    h1 = resample(frames["15m"], "1h")
+    if len(h1) > 2 * cfg.SWING_LEN + 2:
+        _, sl = swing_points(h1, cfg.SWING_LEN)
+        recent = h1.index >= h1.index[-1] - pd.Timedelta(hours=cfg.STOP_POOLS_1H_HOURS)
+        out += [(float(v), "1H swing low") for v in h1["low"].to_numpy()[sl & recent]]
     return out
+
+
+def _demand_below(frames: dict, zones: list[Zone], ceiling: float, atr4h: float) -> list[Zone]:
+    """Narx ostidagi to'ldirilmagan bullish FVG/OB (4H/1D/1W) — narx ularni to'ldirib qaytishi mumkin.
+
+    Zonaning to'ldirilgan qismi olib tashlanadi: tepa = yaratilgandan keyingi eng past narx.
+    """
+    out: list[Zone] = []
+    for z in zones:
+        if z.side != "bull" or z.kind not in ("FVG", "OB") or z.tf not in cfg.STOP_ZONE_TFS:
+            continue
+        df = frames[z.tf]
+        later = df.loc[df.index > z.time, "low"].iloc[1:]  # zonani yasagan shamlardan keyin
+        top = min(z.top, float(later.min())) if len(later) else z.top
+        if z.bottom < top < ceiling and top - z.bottom <= cfg.ANCHOR_MAX_ATR_4H * atr4h:
+            out.append(Zone(z.kind, z.side, z.tf, z.bottom, top, z.time, z.touches, z.flipped, z.note))
+    return out
+
+
+def _protect_stop(stop: float, reason: str, levels: list[tuple[float, str]], demand: list[Zone],
+                  ceiling: float, atr4h: float) -> tuple[float | None, str, Zone | None]:
+    """Stop likvidlik yoki to'ldirilmagan FVG/OB ichida/yonida qolmasin — aks holda uni "ovlashadi".
+
+    - Stopdan LIQ_NEAR_STOP_ATR_4H masofadagi low (PDL/PWL, 1D/4H/1H swing low, EQL) ostiga tushadi.
+    - Stop to'ldirilmagan 4H/1D/1W FVG/OB ichida yoki uning tepasiga yaqin bo'lsa — zona ostiga tushadi:
+      narx FVG ni to'ldirib qaytishi mumkin.
+    - Bu ZANJIR bo'lib takrorlanadi, lekin boshlang'ich stopdan STOP_MAX_PUSH_ATR_4H dan uzoqqa emas —
+      undan uzoq kerak bo'lsa stop None (bu kirishdan xavfsiz savdo yo'q).
+    - Qaytaradi: (stop yoki None, sabab, stop surilgan eng yuqori FVG/OB).
+    16-oktabr LINK: stop 12.415 aynan 1H low 12.414 da, ostida 4H FVG 12.15–12.35 to'ldirilmagan edi.
+    """
+    near_d = cfg.LIQ_NEAR_STOP_ATR_4H * atr4h
+    below = cfg.STOP_BELOW_LOW_ATR_4H * atr4h
+    floor = stop - cfg.STOP_MAX_PUSH_ATR_4H * atr4h  # stop bundan pastga surilmaydi
+    first_zone: Zone | None = None
+    for _ in range(12):
+        cands = [(lvl - below, f"likvidlik ostida: {name} — {fmt(lvl)} (stop ovlanmasligi uchun)", None)
+                 for lvl, name in levels if stop - near_d < lvl < ceiling and lvl - below < stop]
+        cands += [(z.bottom - cfg.STOP_BELOW_ZONE_ATR_4H * atr4h,
+                   f"{z.label()} ({fmt(z.bottom)} – {fmt(z.top)}) ostida — narx FVG/OB ni to'ldirib qaytishi mumkin", z)
+                  for z in demand if z.bottom - cfg.STOP_BELOW_ZONE_ATR_4H * atr4h < stop < z.top + near_d]
+        if not cands:
+            break
+        new_stop, new_reason, z = min(cands, key=lambda c: c[0])
+        if z is not None and (first_zone is None or z.top > first_zone.top):
+            first_zone = z
+        if new_stop < floor:
+            return None, new_reason, first_zone  # xavfsiz stop juda uzoq — bu kirishdan savdo yo'q
+        stop, reason = new_stop, new_reason
+    return stop, reason, first_zone
+
+
+def _plan(entry: float, stop: float | None, frames: dict, zones: list[Zone], atr4h: float) -> list | None:
+    """Kirish/stop uchun TP'lar; 1W/1D taklif zonasi 1R ichida bo'lsa yoki 1:3 maqsad yo'q bo'lsa — None."""
+    if stop is None or stop >= entry:
+        return None
+    risk = entry - stop
+    for z in zones:
+        if z.side == "bear" and z.tf in cfg.BLOCKING_TFS and (
+            z.bottom <= entry < z.top or entry < z.bottom < entry + cfg.BLOCK_WITHIN_R * risk
+        ):
+            return None
+    targets = _targets(entry, stop, frames, zones, merge_tol=0.25 * atr4h, frontrun=cfg.FRONTRUN_ATR_4H * atr4h)
+    return targets or None
 
 
 # ------------------------------------------------------------------ asosiy tahlil
@@ -318,29 +389,23 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
         stop = min(stop, anchor.bottom - cfg.STOP_BELOW_ZONE_ATR_4H * atr4h)
         stop_reason = f"{anchor.label()} ({fmt(anchor.bottom)} – {fmt(anchor.top)}) ostida"
 
-    # Stop olinmagan likvidlik ustida yoki uning yonida qolmasin — aks holda uni "ovlashadi".
-    # Reaksiya low'idan pastdagi (hali urilmagan) hovuz stopga yaqin bo'lsa, stop uning ostiga tushadi.
-    pools = [(lvl, name) for lvl, name in _sell_side_levels(frames, zones)
-             if stop - cfg.LIQ_NEAR_STOP_ATR_4H * atr4h < lvl < touch_low]
-    if pools:
-        lvl, name = min(pools)
-        if lvl - cfg.STOP_BELOW_LOW_ATR_4H * atr4h < stop:
-            stop = lvl - cfg.STOP_BELOW_LOW_ATR_4H * atr4h
-            stop_reason = f"likvidlik ostida: {name} — {fmt(lvl)} (stop ovlanmasligi uchun)"
-    if stop >= entry:
-        return None
-    risk = entry - stop
-
-    # Katta TF taklif zonasi (1W/1D) yaqin tepada yoki narx uning ichida bo'lsa — buy qilinmaydi
-    for z in zones:
-        if z.side == "bear" and z.tf in cfg.BLOCKING_TFS and (
-            z.bottom <= entry < z.top or entry < z.bottom < entry + cfg.BLOCK_WITHIN_R * risk
-        ):
-            return None
-
-    # 5) MAJBURIY: TP1 yaqin qarshilik, TP2 likvidlikdan oldin, oxirgi TP RR >= 1:3
-    targets = _targets(entry, stop, frames, zones, merge_tol=0.25 * atr4h, frontrun=cfg.FRONTRUN_ATR_4H * atr4h)
-    if not targets:
+    levels = _sell_side_levels(frames, zones)
+    demand = _demand_below(frames, zones, touch_low, atr4h)
+    stop, stop_reason, deeper = _protect_stop(stop, stop_reason, levels, demand, touch_low, atr4h)
+    entry_note = None
+    targets = _plan(entry, stop, frames, zones, atr4h)
+    if targets is None and deeper is not None and price - deeper.top <= cfg.MAX_LIMIT_DIST_ATR_4H * atr4h:
+        # Stop ostdagi to'ldirilmagan FVG/OB ostiga tushgach RR yetmadi — narx o'sha zonani to'ldirishi
+        # kutiladi: kirish zona tepasida (limit), stop zona ostida.
+        entry, limit, anchor = deeper.top, True, deeper
+        stop = min(deeper.bottom - cfg.STOP_BELOW_ZONE_ATR_4H * atr4h, entry - cfg.MIN_STOP_ATR_4H * atr4h)
+        stop, stop_reason, _ = _protect_stop(
+            stop, f"{deeper.label()} ({fmt(deeper.bottom)} – {fmt(deeper.top)}) ostida", levels,
+            [z for z in demand if z.top < deeper.bottom], entry, atr4h)
+        entry_note = (f"Kirish ostdagi to'ldirilmagan {deeper.label()} da ({fmt(deeper.bottom)} – {fmt(deeper.top)}) — "
+                      f"narx uni to'ldirib qaytishi kutiladi")
+        targets = _plan(entry, stop, frames, zones, atr4h)
+    if targets is None:
         return None
 
     # 6) Sabablar — har biri 1 ta
@@ -361,6 +426,8 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
     ):
         if extra:
             reasons.append(extra)
+    if entry_note:
+        reasons.append(entry_note)
     if trend_reason:
         reasons.append(trend_reason)
     d = frames["1D"].iloc[-30:]

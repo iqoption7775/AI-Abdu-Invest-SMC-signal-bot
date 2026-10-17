@@ -49,9 +49,14 @@ GLOBAL_COOLDOWN_HOURS = 2 # Har qanday signaldan keyin shuncha soat yangi signal
 REQUIRE_4H_UPTREND = True  # Pasayish trendida buy yo'q: narx 4H EMA50 ustida va EMA50 ko'tarilmoqda,
                            # yoki so'nggi TREND_CHOCH_4H_BARS ta 4H shamda bullish CHoCH/BOS bo'lgan
 TREND_CHOCH_4H_BARS = 6    # 6 ta 4H sham = 1 sutka
+BTC_FILTER = True          # Altkoinlarga signal faqat BTC 4H trend yuqoriga bo'lganda (altlar BTC ortidan yuradi)
 REQUIRE_SWEEP = True       # Klassik SMC: likvidlik olinishi (sweep) majburiy, CHoCH/BOS undan keyin bo'lishi shart
 SR_LIQUIDITY_TOUCHES = 3   # Shuncha va ko'p tegilgan support — likvidlik: faqat sweep'dan keyin kirish
-LIQ_NEAR_STOP_ATR_4H = 0.3 # Stopdan shu masofadagi urilmagan likvidlik bo'lsa — stop uning ostiga tushadi
+LIQ_NEAR_STOP_ATR_4H = 0.3 # Stopdan shu masofadagi urilmagan likvidlik bo'lsa — stop uning ostiga tushadi (zanjir bo'lib)
+STOP_POOLS_1H_HOURS = 24  # Stop tekshiruvida oxirgi 24 soatdagi 1H swing low'lar hisobga olinadi
+STOP_ZONE_TFS = ["4H"]     # Stop to'ldirilmagan 4H bullish FVG/OB ichida yoki tepasida qolmaydi — ostiga tushadi
+STOP_MAX_PUSH_ATR_4H = 1.0 # Likvidlik/FVG uchun stop ko'pi bilan 1×ATR(4H) pastga suriladi; ko'proq kerak bo'lsa — signal yo'q
+MAX_LIMIT_DIST_ATR_4H = 2.0  # Ostdagi FVG/OB narxdan ≤ 2×ATR(4H) da bo'lsa — kirish o'sha zona tepasida (limit)
 
 ZONE_TOUCH_HOURS = 3      # Narx zonaga oxirgi necha soat ichida tekkan bo'lishi kerak
 BREAK_LOOKBACK_HOURS = 3  # BOS/CHoCH oxirgi necha soat ichida bo'lgan bo'lishi kerak

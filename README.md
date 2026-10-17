@@ -14,6 +14,7 @@ Bot hamma sabablarni kutmaydi: **istalgan 3 ta sabab bir vaqtda mos kelsa** sign
 3. **Oxirgi TP kamida 1:3 RR.**
 4. **4H trend yuqoriga** — narx 4H EMA50 ustida va EMA50 ko'tarilmoqda, yoki so'nggi sutkada 4H da bullish CHoCH/BOS.
    Pasayish trendida buy signal berilmaydi.
+5. **BTC filtri** — altkoinlarga signal faqat **BTC 4H trend yuqoriga** bo'lganda (altlar BTC ortidan yuradi).
 
 **Klassik SMC modeli (majburiy):** avval **likvidlik olinadi** — PDL/PWL, 1D/4H swing low, teng low'lar yoki
 support ostiga tushilib, narx qaytib chiqadi; keyin **CHoCH/BOS** (sweep'dan keyin); keyin FVG/OB'dan kirish.
@@ -22,8 +23,13 @@ Stop sweep soyasi ostida. FVG yoki OB'ga tegishning o'zi yetarli emas.
 **Likvidlik qoidalari (15-oktabr):**
 - 3+ marta tegilgan support — kuchli zona emas, ostida stoplar to'plangan **likvidlik**. Bunday zona faqat narx
   uning ostiga tushib (sweep) qaytib chiqqandan keyin hisoblanadi.
-- Stop yonida hali urilmagan likvidlik (PDL/PWL, swing low, teng low'lar, ko'p tegilgan support) bo'lsa —
-  stop uning **ostiga** qo'yiladi. Shunda RR 1:3 ga yetmasa, signal berilmaydi.
+- Stop yonida hali urilmagan likvidlik (PDL/PWL, 1D/4H/1H swing low, teng low'lar, ko'p tegilgan support) bo'lsa —
+  stop uning **ostiga** qo'yiladi. Bu **zanjir** bo'lib takrorlanadi: yangi stop yonida yana low bo'lsa, uning ostiga ham.
+- Stop **to'ldirilmagan 4H FVG/OB ichida yoki tepasida** qolmaydi — narx FVG ni to'ldirib qaytishi mumkin, shuning uchun
+  stop zona **ostiga** tushadi.
+- Stop ko'pi bilan 1×ATR(4H) pastga suriladi. Ko'proq kerak bo'lsa yoki RR 1:3 ga yetmasa / 1W/1D taklif zonasi 1R ichida
+  qolsa — bozordan kirilmaydi. Bunda ostdagi FVG narxga yaqin bo'lsa, bot **FVG tepasiga limit** beradi (stop FVG ostida);
+  u ham shartlardan o'tmasa — signal yo'q.
 
 **Kirish / stop / TP (treyder modeli):**
 - **Kirish** — zona tepasida (narx zonadan chiqib ketgan bo'lsa — limit), zona ichida bo'lsa — joriy narx.

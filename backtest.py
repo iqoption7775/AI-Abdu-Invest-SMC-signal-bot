@@ -49,11 +49,11 @@ TODAY = [
     ("NEAR/USD", "2026-10-14 10:30", 5.0382, 4.9618, [5.3650, 5.4327, 5.4978]),
 ]
 
-_KEYS = ["REQUIRE_SWEEP", "REQUIRE_4H_UPTREND", "SR_LIQUIDITY_TOUCHES", "LIQ_NEAR_STOP_ATR_4H", "LTF_TIMEFRAMES"]
+_KEYS = ["BTC_FILTER", "REQUIRE_SWEEP", "REQUIRE_4H_UPTREND", "SR_LIQUIDITY_TOUCHES", "LIQ_NEAR_STOP_ATR_4H", "LTF_TIMEFRAMES"]
 DEFAULTS = {k: getattr(cfg, k) for k in _KEYS}
 
 VARIANTS = {
-    "A. Eski (14-oktabr, filtrsiz)": {"REQUIRE_SWEEP": False, "REQUIRE_4H_UPTREND": False, "SR_LIQUIDITY_TOUCHES": 10**6,
+    "A. Eski (14-oktabr, filtrsiz)": {"BTC_FILTER": False, "REQUIRE_SWEEP": False, "REQUIRE_4H_UPTREND": False, "SR_LIQUIDITY_TOUCHES": 10**6,
                                       "LIQ_NEAR_STOP_ATR_4H": -1e9},
     "B. Yangi (hozirgi bot)": {},
     "C. Yangi + faqat 15m tasdiq": {"LTF_TIMEFRAMES": ["15m"]},
@@ -162,7 +162,16 @@ def run_variant(args):
     trades = []
     for t in hours:
         cands = []
+        btc_ok = True
+        if cfg.BTC_FILTER and "⭐ BTC/USD" in data:
+            try:
+                bf, bp = snapshot(data["⭐ BTC/USD"], t)
+                btc_ok = strategy._trend_4h(bf, bp) is not None
+            except Exception:
+                btc_ok = False
         for sym, full in data.items():
+            if not btc_ok and "BTC" not in sym:
+                continue
             try:
                 frames, price = snapshot(full, t)
                 if min(len(frames[tf]) for tf in frames) < 60:

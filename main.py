@@ -12,7 +12,7 @@ from pathlib import Path
 
 import config as cfg
 from data import fetch
-from strategy import analyze
+from strategy import _trend_4h, analyze
 from telegram import format_signal, send
 
 STATE_FILE = Path(__file__).with_name("state.json")
@@ -35,13 +35,25 @@ def run() -> int:
     state = load_state()
     tfs = cfg.HTF_TIMEFRAMES + cfg.LTF_TIMEFRAMES
     candidates = []
+    btc_trend = None  # BTC 4H trend matni; None — BTC pasayishda yoki ma'lumot yo'q
     for sym in cfg.SYMBOLS:
+        is_btc = "BTC" in sym["name"]
+        if cfg.BTC_FILTER and not is_btc and btc_trend is None:
+            print(f"· {sym['name']}: BTC 4H trend yuqoriga emas — altkoin signali berilmaydi")
+            continue
         try:
             frames, price = fetch(sym, tfs)
+            if is_btc:
+                try:
+                    btc_trend = _trend_4h(frames, price)
+                except Exception:
+                    btc_trend = None
             sig = analyze(sym["name"], frames, price)
         except Exception:
             print(f"❌ {sym['name']}: xato\n{traceback.format_exc()}")
             continue
+        if sig is not None and not is_btc and btc_trend:
+            sig.reasons.append(f"BTC ham qo'llab-quvvatlaydi: {btc_trend}")
         if sig is None:
             print(f"· {sym['name']}: signal yo'q (narx {price})")
             continue

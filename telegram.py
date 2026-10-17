@@ -36,6 +36,7 @@ def format_signal(s: Signal) -> str:
     lines += [
         "",
         f"🕐 {now} (Toshkent)",
+        "🔎 <i>Savdoga kirishdan oldin o'zingiz ham qo'shimcha tahlil qilishingizni tavsiya qilamiz.</i>",
         "⚠️ <i>Moliyaviy maslahat emas. Riskni o'zingiz boshqaring.</i>",
     ]
     return "\n".join(lines)

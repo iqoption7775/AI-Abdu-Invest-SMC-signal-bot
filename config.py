@@ -41,7 +41,7 @@ MAX_TARGETS = 3           # Nechta take-profit ko'rsatiladi
 MIN_STOP_ATR_4H = 0.75    # Stop kirishdan kamida 0.75×ATR(4H) pastda (shovqindan himoya)
 STOP_BELOW_LOW_ATR_4H = 0.15  # Stop zona reaksiyasining eng past nuqtasidan 0.15×ATR(4H) pastda
 WIDE_ZONE_ATR_4H = 1.5    # Zona bundan keng bo'lsa, narx uning yarmigacha (CE) tushgan bo'lishi shart
-BLOCKING_TFS = ["1W", "1D"]  # Shu TF'dagi taklif zonasi (bearish FVG/OB, resistance) ... [22-okt tuzatish: + "4H"]
+BLOCKING_TFS = ["1W", "1D", "4H"]  # Shu TF'dagi taklif zonasi (bearish FVG/OB, resistance) ...
 BLOCK_WITHIN_R = 1.0      # ... kirishdan 1R ichida yoki narx uning ichida bo'lsa — signal yo'q
 MAX_SIGNALS_PER_RUN = 2   # Bir tekshiruvda ko'pi bilan nechta signal (BTC/ETH birinchi, keyin eng kuchlilari)
 GLOBAL_COOLDOWN_HOURS = 2 # Har qanday signaldan keyin shuncha soat yangi signal yo'q (koinlar birga harakatlanadi)
@@ -50,12 +50,12 @@ REQUIRE_4H_UPTREND = True  # Pasayish trendida buy yo'q: narx 4H EMA50 ustida va
                            # yoki so'nggi TREND_CHOCH_4H_BARS ta 4H shamda bullish CHoCH/BOS bo'lgan
 TREND_CHOCH_4H_BARS = 6    # 6 ta 4H sham = 1 sutka
 BTC_FILTER = True          # Altkoinlarga signal faqat BTC 4H trend yuqoriga bo'lganda (altlar BTC ortidan yuradi)
-# --- 22-oktabr tuzatishlari: backtest natijasidan keyin yoqiladi (backtest.py dagi C varianti) ---
-BTC_RANGE_FILTER = False   # True: altlarga signal faqat BTC o'z diapazonining pastki qismida bo'lganda
+# --- 22-oktabr tuzatishlari (backtest, 60 kun: hozirgi bot −16.4R → D varianti +4.9R) ---
+BTC_RANGE_FILTER = False   # True: altlarga faqat BTC diapazonining pastki qismida (backtest: juda qattiq, 60 kunda 7 signal)
 BTC_RANGE_DAYS = 14        # BTC diapazoni: oxirgi 14 kunlik high/low
 BTC_RANGE_MAX = 0.5        # BTC diapazonning pastki 50% ida bo'lishi kerak
-REQUIRE_15M = False        # True: CHoCH/BOS 15m da ham bo'lishi shart (faqat 5m — signal yo'q)
-MAX_ZONE_ATR_4H = 1e9      # 3.0: kengligi 3×ATR(4H) dan katta FVG/OB/OTE zona hisoblanmaydi
+REQUIRE_15M = True         # CHoCH/BOS 15m da ham bo'lishi shart (faqat 5m — signal yo'q)
+MAX_ZONE_ATR_4H = 3.0      # Kengligi 3×ATR(4H) dan katta FVG/OB/OTE zona hisoblanmaydi
 REQUIRE_SWEEP = True       # Klassik SMC: likvidlik olinishi (sweep) majburiy, CHoCH/BOS undan keyin bo'lishi shart
 SR_LIQUIDITY_TOUCHES = 3   # Shuncha va ko'p tegilgan support — likvidlik: faqat sweep'dan keyin kirish
 LIQ_NEAR_STOP_ATR_4H = 0.3 # Stopdan shu masofadagi urilmagan likvidlik bo'lsa — stop uning ostiga tushadi (zanjir bo'lib)
@@ -72,3 +72,18 @@ MAX_ZONES_PER_TF = 6      # Har bir timeframe'dan eng yangi nechta zona olinadi
 SYMBOL_COOLDOWN_HOURS = 4 # Bitta juftlikdan signaldan keyin kamida shuncha soat yangi signal yo'q
 TIMEZONE = "Asia/Tashkent"
 BRAND = "AI Abdu Invest"
+
+# --- ABDU MODELI (abdu_model.py) — treyderning o'z strategiyasi, 0 dan ---
+# Discount → sell-side sweep → 1H CHoCH → 4H OB + 1H FVG → retestda limit BUY
+AM_SWING_N = 2              # swing high/low: har ikki tomonda 2 tadan sham
+AM_SWEEP_LOOKBACK_4H = 18   # sweep oxirgi 18 ta 4H sham (3 sutka) ichida bo'lgan bo'lishi kerak
+AM_POOL_LOOKBACK_4H = 90    # olinadigan 4H swing low oxirgi 90 sham (15 sutka) ichidan
+AM_SWEEP_SPAN_4H = 3       # hovuz sweep low dan ko'pi bilan 3 ta 4H sham oldin sinilgan bo'lishi kerak
+AM_USE_DISCOUNT = True      # sweep discount zonada bo'lishi shart
+AM_DISCOUNT_DAYS = 30       # discount: 1D oxirgi 30 kunlik diapazon
+AM_DISCOUNT_MAX = 0.5       # sweep low diapazonning pastki 50% ida
+AM_FVG_MIN_ATR = 0.1        # 1H FVG kamida 0.1×ATR(1H) kenglikda
+AM_ENTRY = "fvg_top"        # kirish: fvg_top | fvg_ce (FVG o'rtasi) | ob_top (4H OB tepasi)
+AM_STOP_BUF_ATR = 0.15      # stop sweep low / OB ostidan 0.15×ATR(4H) pastda
+AM_MIN_RR = 3.0             # oxirgi TP kamida 1:3
+AM_BLOCK_SUPPLY_R = 0.0     # >0: kirishdan shuncha R ichida taklif zonasi bo'lsa — signal yo'q

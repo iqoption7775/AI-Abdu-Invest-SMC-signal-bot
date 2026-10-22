@@ -51,12 +51,13 @@ _KEYS = ["BTC_FILTER", "REQUIRE_SWEEP", "REQUIRE_4H_UPTREND", "SR_LIQUIDITY_TOUC
          "LTF_TIMEFRAMES", "BLOCKING_TFS", "BTC_RANGE_FILTER", "BTC_RANGE_DAYS", "REQUIRE_15M", "MAX_ZONE_ATR_4H"]
 DEFAULTS = {k: getattr(cfg, k) for k in _KEYS}
 
-# 22-oktabr tuzatishlari (config.py da hozircha o'chiq — hozirgi bot = B varianti)
+# 22-oktabr tuzatishlari — hozirgi bot D varianti (BTC diapazon filtri o'chiq)
 NEW_22OCT = {"BLOCKING_TFS": ["1W", "1D", "4H"], "BTC_RANGE_FILTER": True, "REQUIRE_15M": True, "MAX_ZONE_ATR_4H": 3.0}
+OLD_17OCT = {"BLOCKING_TFS": ["1W", "1D"], "BTC_RANGE_FILTER": False, "REQUIRE_15M": False, "MAX_ZONE_ATR_4H": 1e9}
 VARIANTS = {
-    "B. 17-okt versiya (hozirgi bot)": {},
+    "B. 17-okt versiya": OLD_17OCT,
     "C. Yangi — 5 ta tuzatish": NEW_22OCT,
-    "D. Yangi, BTC diapazon filtrisiz": {**NEW_22OCT, "BTC_RANGE_FILTER": False},
+    "D. Yangi, BTC diapazon filtrisiz (hozirgi bot)": {**NEW_22OCT, "BTC_RANGE_FILTER": False},
     "E. Yangi, 15m talabisiz": {**NEW_22OCT, "REQUIRE_15M": False},
     "F. Yangi, BTC diapazoni 30 kun": {**NEW_22OCT, "BTC_RANGE_DAYS": 30},
 }

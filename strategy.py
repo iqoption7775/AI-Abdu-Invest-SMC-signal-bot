@@ -315,6 +315,24 @@ def _plan(entry: float, stop: float | None, frames: dict, zones: list[Zone], atr
     return targets or None
 
 
+def btc_gate(frames: dict, price: float) -> str | None:
+    """Altkoinlar uchun BTC sharti: 4H trend yuqoriga VA (yoqilgan bo'lsa) BTC o'z diapazonining
+    pastki qismida. Diapazon tepasida altlar xarid qilinmaydi — BTC qaytsa hammasi birga tushadi
+    (21-oktabr: BTC 84 800 dan qaytdi, ADA/XLM/LINK signallari stop bo'ldi; NEAR esa diapazon
+    tubida kirib +14% berdi). O'tsa — sabab matni, o'tmasa — None."""
+    trend = _trend_4h(frames, price)
+    if trend is None:
+        return None
+    if not cfg.BTC_RANGE_FILTER:
+        return trend
+    d = frames["1D"].iloc[-cfg.BTC_RANGE_DAYS:]
+    lo, hi = min(float(d["low"].min()), price), max(float(d["high"].max()), price)
+    pos = (price - lo) / (hi - lo) if hi > lo else 0.0
+    if pos > cfg.BTC_RANGE_MAX:
+        return None
+    return f"{trend}; BTC {cfg.BTC_RANGE_DAYS} kunlik diapazonning pastki qismida ({pos * 100:.0f}%)"
+
+
 # ------------------------------------------------------------------ asosiy tahlil
 def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signal | None:
     atr4h = float(atr(frames["4H"]).iloc[-1])
@@ -335,6 +353,9 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
 
     # 2) MAJBURIY: narx biror talab hududiga tekkan
     active_pairs = _active(zones, frames["5m"], price, tol=0.5 * atr4h)
+    # Juda keng FVG/OB/OTE (masalan 1W FVG 0.14–0.23) aniq zona emas — hisobga olinmaydi
+    active_pairs = [(z, t) for z, t in active_pairs
+                    if z.kind in ("SR", "LIQ") or z.top - z.bottom <= cfg.MAX_ZONE_ATR_4H * atr4h]
     if not active_pairs:
         return None
     # bir xil tur va timeframe'dagi ustma-ust hududlar bitta sabab hisoblanadi
@@ -369,6 +390,8 @@ def analyze(symbol: str, frames: dict[str, pd.DataFrame], price: float) -> Signa
         breaks = [b for b in breaks if b.time > sweep_time]  # CHoCH/BOS sweep'dan KEYIN bo'lishi shart
     if not breaks:
         return None
+    if cfg.REQUIRE_15M and not any(b.tf == "15m" for b in breaks):
+        return None  # faqat 5m/10m tasdig'i — shovqin bo'lishi mumkin, 15m ham tasdiqlashi shart
 
     # 4H trend filtri: pasayish trendida buy yo'q (faqat 4H CHoCH dan keyin)
     trend_reason = _trend_4h(frames, price)

@@ -31,6 +31,13 @@ Stop sweep soyasi ostida. FVG yoki OB'ga tegishning o'zi yetarli emas.
   qolsa — bozordan kirilmaydi. Bunda ostdagi FVG narxga yaqin bo'lsa, bot **FVG tepasiga limit** beradi (stop FVG ostida);
   u ham shartlardan o'tmasa — signal yo'q.
 
+**22-oktabr tuzatishlari (backtest'dan keyin yoqiladi, `config.py`):**
+1. 4H qarshilik ham kirishdan 1R ichida bo'lsa — signal yo'q (`BLOCKING_TFS` + "4H").
+2. Altlarga signal faqat BTC 14 kunlik diapazonining pastki yarmida (`BTC_RANGE_FILTER`).
+3. CHoCH/BOS 15m da ham bo'lishi shart (`REQUIRE_15M`).
+4. Kengligi 3×ATR(4H) dan katta zona hisoblanmaydi (`MAX_ZONE_ATR_4H`).
+Backtest: *Actions → Backtest tahlili → Run workflow*, natija `hisobot/backtest.md` da.
+
 **Kirish / stop / TP (treyder modeli):**
 - **Kirish** — zona tepasida (narx zonadan chiqib ketgan bo'lsa — limit), zona ichida bo'lsa — joriy narx.
 - **Stop** — zona **ostida** (kengligi ≤ 3×ATR(4H) bo'lgan 4H/1D FVG, OB yoki support), kamida 0.75×ATR(4H).

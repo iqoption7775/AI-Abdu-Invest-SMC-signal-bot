@@ -26,7 +26,7 @@ import strategy
 from data import resample
 from smc import ema
 
-BACKTEST_DAYS = 21
+BACKTEST_DAYS = 60
 EXIT_AFTER_HOURS = 24 * 7          # shu vaqtgacha TP ham, stop ham bo'lmasa — bozor narxida yopiladi
 LIMIT_FILL_HOURS = 12              # limit kirish shu vaqt ichida to'lmasa — bekor
 TAIL = {"5m": 720, "10m": 360, "15m": 720, "4H": 400, "1D": 400, "1W": 200}  # Kraken ~720 sham beradi
@@ -38,25 +38,27 @@ COINBASE = {
     "ALGO/USD": "ALGO-USD",
 }
 
-# Bugun Telegram'ga kelgan signallar (skrinshotlardan). Vaqt — UTC.
+# Test haftasida (17–22 oktabr, 17-okt versiya) Telegram'ga kelgan signallar. Vaqt — UTC.
+# (koin, vaqt, kirish, stop, TP'lar, limit)
 TODAY = [
-    ("⭐ BTC/USD", "2026-10-14 08:33", 83774.7, 83220.1, [85604.0, 86683.4, 86973.6]),
-    ("⭐ ETH/USD", "2026-10-14 08:33", 2514.5, 2496.5, [2576.9, 2604.6, 2623.3]),
-    ("SOL/USD", "2026-10-14 08:33", 107.69, 106.83, [110.61, 111.23, 111.92]),
-    ("LINK/USD", "2026-10-14 09:30", 12.87, 12.84, [13.09, 13.18, 13.25]),
-    ("XRP/USD", "2026-10-14 09:30", 1.37, 1.36, [1.38, 1.40, 1.41]),
-    ("XLM/USD", "2026-10-14 10:30", 0.18873, 0.18756, [0.19277, 0.19417, 0.19539]),
-    ("NEAR/USD", "2026-10-14 10:30", 5.0382, 4.9618, [5.3650, 5.4327, 5.4978]),
+    ("DOT/USD", "2026-10-19 17:28", 1.1440, 1.1080, [1.1972, 1.2323, 1.2596], True),
+    ("XLM/USD", "2026-10-21 11:29", 0.18480, 0.18028, [0.19249, 0.19760, 0.20260], False),
+    ("LINK/USD", "2026-10-21 15:32", 12.630, 12.393, [12.919, 13.156, 13.365], False),
+    ("DOT/USD", "2026-10-22 00:34", 1.1246, 1.0849, [1.1736, 1.2194, 1.2601], True),
 ]
 
-_KEYS = ["BTC_FILTER", "REQUIRE_SWEEP", "REQUIRE_4H_UPTREND", "SR_LIQUIDITY_TOUCHES", "LIQ_NEAR_STOP_ATR_4H", "LTF_TIMEFRAMES"]
+_KEYS = ["BTC_FILTER", "REQUIRE_SWEEP", "REQUIRE_4H_UPTREND", "SR_LIQUIDITY_TOUCHES", "LIQ_NEAR_STOP_ATR_4H",
+         "LTF_TIMEFRAMES", "BLOCKING_TFS", "BTC_RANGE_FILTER", "BTC_RANGE_DAYS", "REQUIRE_15M", "MAX_ZONE_ATR_4H"]
 DEFAULTS = {k: getattr(cfg, k) for k in _KEYS}
 
+# 22-oktabr tuzatishlari (config.py da hozircha o'chiq — hozirgi bot = B varianti)
+NEW_22OCT = {"BLOCKING_TFS": ["1W", "1D", "4H"], "BTC_RANGE_FILTER": True, "REQUIRE_15M": True, "MAX_ZONE_ATR_4H": 3.0}
 VARIANTS = {
-    "A. Eski (14-oktabr, filtrsiz)": {"BTC_FILTER": False, "REQUIRE_SWEEP": False, "REQUIRE_4H_UPTREND": False, "SR_LIQUIDITY_TOUCHES": 10**6,
-                                      "LIQ_NEAR_STOP_ATR_4H": -1e9},
-    "B. Yangi (hozirgi bot)": {},
-    "C. Yangi + faqat 15m tasdiq": {"LTF_TIMEFRAMES": ["15m"]},
+    "B. 17-okt versiya (hozirgi bot)": {},
+    "C. Yangi — 5 ta tuzatish": NEW_22OCT,
+    "D. Yangi, BTC diapazon filtrisiz": {**NEW_22OCT, "BTC_RANGE_FILTER": False},
+    "E. Yangi, 15m talabisiz": {**NEW_22OCT, "REQUIRE_15M": False},
+    "F. Yangi, BTC diapazoni 30 kun": {**NEW_22OCT, "BTC_RANGE_DAYS": 30},
 }
 
 
@@ -166,7 +168,7 @@ def run_variant(args):
         if cfg.BTC_FILTER and "⭐ BTC/USD" in data:
             try:
                 bf, bp = snapshot(data["⭐ BTC/USD"], t)
-                btc_ok = strategy._trend_4h(bf, bp) is not None
+                btc_ok = strategy.btc_gate(bf, bp) is not None
             except Exception:
                 btc_ok = False
         for sym, full in data.items():
@@ -227,18 +229,27 @@ def main():
         except Exception as e:
             print(f"  {sym}: XATO {e}")
 
-    # 1) Bugungi signallar
-    lines += ["## 1. Bugungi signallar (eski versiya)", "",
-              "| Koin | Kirish (UTC) | Stop % | Natija | Stopgacha eng ko'p foyda | Stopdan keyin TP ga yetdimi | Trend kirishda |",
+    # 1) Test haftasi signallari — yangi qoidalar bilan ham tekshiriladi
+    for k, v in {**DEFAULTS, **NEW_22OCT}.items():
+        setattr(cfg, k, v)
+    lines += ["## 1. Test haftasi signallari (17-okt versiya)", "",
+              "| Koin | Vaqt (UTC) | Stop % | Natija (Coinbase) | Eng ko'p foyda | Yangi qoidalar bilan signal chiqardimi | Trend kirishda |",
               "|---|---|---|---|---|---|---|"]
-    for sym, ts, entry, stop, tps in TODAY:
+    for sym, ts, entry, stop, tps, limit in TODAY:
         if sym not in data:
             continue
         t = pd.Timestamp(ts, tz="UTC")
-        r = simulate(data[sym]["5m"], t, entry, stop, tps, False)
-        hunted = "HA — stop ovlangan" if r.get("hunted") else "yo'q"
-        lines.append(f"| {sym} | {ts[11:]} | −{(entry - stop) / entry * 100:.2f}% | {r['result']} "
-                     f"| {r.get('mfe', 0):.1f}R | {hunted if r['result'] == 'stop' else '—'} | {trend_at(data[sym], t)} |")
+        r = simulate(data[sym]["5m"], t, entry, stop, tps, limit)
+        try:
+            bf, bp = snapshot(data["⭐ BTC/USD"], t)
+            gate = strategy.btc_gate(bf, bp)
+            fr, pr = snapshot(data[sym], t)
+            sig = strategy.analyze(sym, fr, pr) if gate else None
+            new = "HA" if sig else ("YO'Q — BTC sharti" if gate is None else "YO'Q — setup filtri")
+        except Exception as e:
+            new = f"xato: {e}"
+        lines.append(f"| {sym} | {ts[5:]} | −{(entry - stop) / entry * 100:.2f}% | {r['result']} ({r['r']:+.1f}R) "
+                     f"| {r.get('mfe', 0):.1f}R | {new} | {trend_at(data[sym], t)} |")
     lines.append("")
 
     # 2) Backtest

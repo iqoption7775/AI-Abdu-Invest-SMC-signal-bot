@@ -41,7 +41,7 @@ MAX_TARGETS = 3           # Nechta take-profit ko'rsatiladi
 MIN_STOP_ATR_4H = 0.75    # Stop kirishdan kamida 0.75×ATR(4H) pastda (shovqindan himoya)
 STOP_BELOW_LOW_ATR_4H = 0.15  # Stop zona reaksiyasining eng past nuqtasidan 0.15×ATR(4H) pastda
 WIDE_ZONE_ATR_4H = 1.5    # Zona bundan keng bo'lsa, narx uning yarmigacha (CE) tushgan bo'lishi shart
-BLOCKING_TFS = ["1W", "1D"]  # Shu TF'dagi taklif zonasi (bearish FVG/OB, resistance) ...
+BLOCKING_TFS = ["1W", "1D"]  # Shu TF'dagi taklif zonasi (bearish FVG/OB, resistance) ... [22-okt tuzatish: + "4H"]
 BLOCK_WITHIN_R = 1.0      # ... kirishdan 1R ichida yoki narx uning ichida bo'lsa — signal yo'q
 MAX_SIGNALS_PER_RUN = 2   # Bir tekshiruvda ko'pi bilan nechta signal (BTC/ETH birinchi, keyin eng kuchlilari)
 GLOBAL_COOLDOWN_HOURS = 2 # Har qanday signaldan keyin shuncha soat yangi signal yo'q (koinlar birga harakatlanadi)
@@ -50,6 +50,12 @@ REQUIRE_4H_UPTREND = True  # Pasayish trendida buy yo'q: narx 4H EMA50 ustida va
                            # yoki so'nggi TREND_CHOCH_4H_BARS ta 4H shamda bullish CHoCH/BOS bo'lgan
 TREND_CHOCH_4H_BARS = 6    # 6 ta 4H sham = 1 sutka
 BTC_FILTER = True          # Altkoinlarga signal faqat BTC 4H trend yuqoriga bo'lganda (altlar BTC ortidan yuradi)
+# --- 22-oktabr tuzatishlari: backtest natijasidan keyin yoqiladi (backtest.py dagi C varianti) ---
+BTC_RANGE_FILTER = False   # True: altlarga signal faqat BTC o'z diapazonining pastki qismida bo'lganda
+BTC_RANGE_DAYS = 14        # BTC diapazoni: oxirgi 14 kunlik high/low
+BTC_RANGE_MAX = 0.5        # BTC diapazonning pastki 50% ida bo'lishi kerak
+REQUIRE_15M = False        # True: CHoCH/BOS 15m da ham bo'lishi shart (faqat 5m — signal yo'q)
+MAX_ZONE_ATR_4H = 1e9      # 3.0: kengligi 3×ATR(4H) dan katta FVG/OB/OTE zona hisoblanmaydi
 REQUIRE_SWEEP = True       # Klassik SMC: likvidlik olinishi (sweep) majburiy, CHoCH/BOS undan keyin bo'lishi shart
 SR_LIQUIDITY_TOUCHES = 3   # Shuncha va ko'p tegilgan support — likvidlik: faqat sweep'dan keyin kirish
 LIQ_NEAR_STOP_ATR_4H = 0.3 # Stopdan shu masofadagi urilmagan likvidlik bo'lsa — stop uning ostiga tushadi (zanjir bo'lib)

@@ -36,9 +36,11 @@ VARIANTS = {
     "4. FVG tepasi + BTC 4H trend filtri": dict(entry="fvg_top", btc=True),
     "5. FVG tepasi, discount shartisiz": dict(entry="fvg_top", AM_USE_DISCOUNT=False),
     "6. FVG tepasi + 1R ichida taklif zonasi bo'lmasin": dict(entry="fvg_top", AM_BLOCK_SUPPLY_R=1.0),
+    "7. JONLI BOT: FVG tepasi + BTC filtri + stop ≤ 5%": dict(entry="fvg_top", btc=True, AM_MAX_STOP_PCT=cfg.AM_MAX_STOP_PCT),
 }
-_CFG = ["AM_USE_DISCOUNT", "AM_BLOCK_SUPPLY_R"]
+_CFG = ["AM_USE_DISCOUNT", "AM_BLOCK_SUPPLY_R", "AM_MAX_STOP_PCT"]
 BASE = {k: getattr(cfg, k) for k in _CFG}
+BASE["AM_MAX_STOP_PCT"] = 100.0  # 1–6 variantlarda stop chegarasi yo'q (avvalgi backtest bilan solishtirish uchun)
 
 
 def load(product: str, end: datetime) -> dict[str, pd.DataFrame]:

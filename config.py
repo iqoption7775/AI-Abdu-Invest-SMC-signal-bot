@@ -9,7 +9,9 @@ SYMBOLS = [
     # Asosiy
     {"name": "⭐ BTC/USD", "source": "kraken", "ticker": "XBTUSD"},
     {"name": "⭐ ETH/USD", "source": "kraken", "ticker": "ETHUSD"},
-    # Qo'shimcha
+]
+# Qo'shimcha 11 ta koin — hammasi tahlil qilinadi (faqat BTC/ETH kerak bo'lsa — pastdagi `SYMBOLS += EXTRA_SYMBOLS` qatorini o'chiring)
+EXTRA_SYMBOLS = [
     {"name": "SOL/USD", "source": "kraken", "ticker": "SOLUSD"},
     {"name": "XRP/USD", "source": "kraken", "ticker": "XRPUSD"},
     {"name": "ADA/USD", "source": "kraken", "ticker": "ADAUSD"},
@@ -22,6 +24,7 @@ SYMBOLS = [
     {"name": "ATOM/USD", "source": "kraken", "ticker": "ATOMUSD"},
     {"name": "ALGO/USD", "source": "kraken", "ticker": "ALGOUSD"},
 ]
+SYMBOLS += EXTRA_SYMBOLS
 
 # --- Strategiya qoidalari ---
 HTF_TIMEFRAMES = ["1W", "1D", "4H"]     # FVG va Order Block zonalari shu yerdan
@@ -74,6 +77,11 @@ TIMEZONE = "Asia/Tashkent"
 BRAND = "AI Abdu Invest"
 
 # --- ABDU MODELI (abdu_model.py) — treyderning o'z strategiyasi, 0 dan ---
+STRATEGY = "abdu"           # "abdu" — Abdu modeli (23-oktabrdan jonli); "v1" — eski SMC bot
+AM_TIMEFRAMES = ["1H", "4H", "12H", "1D", "1W"]
+AM_TOP_STOP_PCT = 3.5       # stop ≤ 3.5% — 🏆 A+ setup (backtest: 75% g'alaba), 3.5–5% — 🥈 A setup
+AM_MAX_STOP_PCT = 5.0       # stop 5% dan katta bo'lsa — signal yo'q (oxirgi TP har doim ≥ 3R: stop 5% → TP ≥ 15%)
+AM_MAX_SIGNALS_PER_RUN = 4  # bir tekshiruvda ko'pi bilan nechta signal (backtestda cheklov yo'q edi)
 # Discount → sell-side sweep → 1H CHoCH → 4H OB + 1H FVG → retestda limit BUY
 AM_SWING_N = 2              # swing high/low: har ikki tomonda 2 tadan sham
 AM_SWEEP_LOOKBACK_4H = 18   # sweep oxirgi 18 ta 4H sham (3 sutka) ichida bo'lgan bo'lishi kerak

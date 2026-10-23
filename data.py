@@ -61,13 +61,20 @@ def fetch_kraken(ticker: str, tfs: list[str]) -> tuple[dict[str, pd.DataFrame], 
     frames: dict[str, pd.DataFrame] = {}
     raw5 = _kraken(ticker, 5)
     price = float(raw5["close"].iloc[-1])
+    raw: dict[str, pd.DataFrame] = {}
     for tf in tfs:
         if tf == "10m":
             df = resample(raw5, "10min")
         elif tf == "5m":
             df = raw5
+        elif tf == "12H":  # Kraken'da 12H yo'q — 4H dan yig'iladi (00:00 va 12:00 UTC)
+            if "4H" not in raw:
+                raw["4H"] = _kraken(ticker, TF_MINUTES["4H"])
+            df = resample(raw["4H"], "12h")
         else:
-            df = _kraken(ticker, TF_MINUTES[tf])
+            if tf not in raw:
+                raw[tf] = _kraken(ticker, TF_MINUTES[tf])
+            df = raw[tf]
         frames[tf] = df.iloc[:-1]  # oxirgi sham hali yopilmagan
     return frames, price
 

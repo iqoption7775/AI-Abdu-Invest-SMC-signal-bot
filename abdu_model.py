@@ -196,6 +196,8 @@ def build(symbol: str, s: Setup, frames: dict, price: float, entry_mode: str | N
     if stop >= entry:
         return None
     risk = entry - stop
+    if risk / entry * 100 > cfg.AM_MAX_STOP_PCT:
+        return None  # stop juda katta (zona keng / sweep chuqur) — backtestda zarar bergan
     targets, supply = _targets(entry, stop, frames, s.imp_high, s.atr4h)
     if not targets:
         return None
@@ -214,6 +216,10 @@ def build(symbol: str, s: Setup, frames: dict, price: float, entry_mode: str | N
     sig = Signal(symbol, entry, stop, targets, [z for z in (s.ob, s.fvg) if z], [], reasons, [],
                  zone, True, f"sweep low ({fmt(s.sweep_low)}) va 4H OB ostida")
     sig.setup_key = f"{symbol}|{s.key_time}"
+    risk_pct = risk / entry * 100
+    sig.badge = ("🏆 A+ setup — stop kichik (backtest: 10 tadan ~7–8 tasi foydada)" if risk_pct <= cfg.AM_TOP_STOP_PCT
+                 else "🥈 A setup — stop 3.5–5%, riskni kamaytiring (backtest: 3 tadan 2 tasi foydada)")
+    sig.management = "TP1 da 50% yoping, qolgani uchun stopni kirish narxiga ko'chiring. Limit 48 soatda to'lmasa — bekor."
     return sig
 
 

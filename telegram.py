@@ -28,11 +28,17 @@ def format_signal(s: Signal) -> str:
         note = "  — qisman foyda" if i == 1 and len(s.targets) > 1 else ""
         lines.append(f"🎯 <b>TP{i}:</b> {fmt(t.price)}  (+{pct:.2f}% · RR 1:{t.rr:.1f}){note}")
         lines.append(f"      └ {t.reason}")
-    lines += ["", f"💪 <b>Kuch:</b> {s.strength} — {s.score} ta sabab mos keldi", "", "🧠 <b>Sabablar:</b>"]
+    badge = getattr(s, "badge", None)
+    if badge:
+        lines += ["", f"<b>{badge}</b>", "", "🧠 <b>Setup (Abdu modeli):</b>"]
+    else:
+        lines += ["", f"💪 <b>Kuch:</b> {s.strength} — {s.score} ta sabab mos keldi", "", "🧠 <b>Sabablar:</b>"]
     lines += [f"• {r}" for r in s.reasons]
     if s.obstacles:
         lines += ["", "🚧 <b>TP1 gacha qarshilik</b> (qisman foyda olish mumkin):"]
         lines += [f"• {z.label()} — {fmt(z.bottom)}" for z in s.obstacles[:3]]
+    if getattr(s, "management", None):
+        lines += ["", f"📌 <b>Boshqaruv:</b> {s.management}"]
     lines += [
         "",
         f"🕐 {now} (Toshkent)",

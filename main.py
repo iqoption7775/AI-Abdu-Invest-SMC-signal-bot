@@ -12,6 +12,7 @@ from pathlib import Path
 
 import config as cfg
 from data import fetch
+import abdu_model
 from strategy import analyze, btc_gate
 from telegram import format_signal, send
 
@@ -33,7 +34,9 @@ def save_state(state: dict) -> None:
 
 def run() -> int:
     state = load_state()
-    tfs = cfg.HTF_TIMEFRAMES + cfg.LTF_TIMEFRAMES
+    abdu = cfg.STRATEGY == "abdu"
+    tfs = cfg.AM_TIMEFRAMES if abdu else cfg.HTF_TIMEFRAMES + cfg.LTF_TIMEFRAMES
+    analyze_fn = abdu_model.analyze if abdu else analyze
     candidates = []
     btc_trend = None  # BTC sharti matni; None — BTC pasayishda, diapazon tepasida yoki ma'lumot yo'q
     for sym in cfg.SYMBOLS:
@@ -48,7 +51,7 @@ def run() -> int:
                     btc_trend = btc_gate(frames, price)
                 except Exception:
                     btc_trend = None
-            sig = analyze(sym["name"], frames, price)
+            sig = analyze_fn(sym["name"], frames, price)
         except Exception:
             print(f"❌ {sym['name']}: xato\n{traceback.format_exc()}")
             continue
@@ -57,31 +60,36 @@ def run() -> int:
         if sig is None:
             print(f"· {sym['name']}: signal yo'q (narx {price})")
             continue
-        if sig.key in state:
-            print(f"· {sym['name']}: bu signal avval yuborilgan, takrorlanmaydi")
+        key = getattr(sig, "setup_key", None) or sig.key
+        sig.state_key = key
+        if key in state:
+            print(f"· {sym['name']}: bu setup bo'yicha signal avval yuborilgan, takrorlanmaydi")
             continue
         recent = [v for k, v in state.items() if k.startswith(sig.symbol + "|")]
-        if recent and time.time() - max(recent) < cfg.SYMBOL_COOLDOWN_HOURS * 3600:
+        if not abdu and recent and time.time() - max(recent) < cfg.SYMBOL_COOLDOWN_HOURS * 3600:
             print(f"· {sym['name']}: yaqinda signal berilgan, kutish vaqti tugamagan")
             continue
         candidates.append(sig)
 
-    # Asosiy (⭐ BTC/ETH) birinchi, keyin sabablari ko'p bo'lganlari
-    candidates.sort(key=lambda s: (not s.symbol.startswith("⭐"), -s.score))
+    # Asosiy (⭐ BTC/ETH) birinchi; Abdu modelida — 🏆 A+ (kichik stop) birinchi
+    candidates.sort(key=lambda s: (not s.symbol.startswith("⭐"),
+                                   (s.entry - s.stop) / s.entry if abdu else -s.score))
+    limit = cfg.AM_MAX_SIGNALS_PER_RUN if abdu else cfg.MAX_SIGNALS_PER_RUN
 
-    # Koinlar birga harakatlanadi: yaqinda signal berilgan bo'lsa, yangi to'lqin kutiladi
+    # Eski botda: koinlar birga harakatlanadi — yaqinda signal bo'lsa, yangi to'lqin kutiladi.
+    # Abdu modelida har bir setup mustaqil (backtest ham shunday) — umumiy kutish yo'q.
     last_any = max(state.values(), default=0)
-    if candidates and time.time() - last_any < cfg.GLOBAL_COOLDOWN_HOURS * 3600:
+    if not abdu and candidates and time.time() - last_any < cfg.GLOBAL_COOLDOWN_HOURS * 3600:
         for sig in candidates:
             print(f"· {sig.symbol}: umumiy kutish vaqti ({cfg.GLOBAL_COOLDOWN_HOURS} soat) tugamagan")
         candidates = []
     sent = 0
-    for sig in candidates[: cfg.MAX_SIGNALS_PER_RUN]:
+    for sig in candidates[:limit]:
         if send(format_signal(sig)):
-            state[sig.key] = time.time()
+            state[sig.state_key] = time.time()
             sent += 1
             print(f"✅ {sig.symbol}: signal yuborildi ({sig.score} ta sabab)")
-    for sig in candidates[cfg.MAX_SIGNALS_PER_RUN:]:
+    for sig in candidates[limit:]:
         print(f"· {sig.symbol}: limit tufayli yuborilmadi ({sig.score} ta sabab)")
     save_state(state)
     print(f"Tayyor. Yuborilgan signallar: {sent}")

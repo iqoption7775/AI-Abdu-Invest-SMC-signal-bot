@@ -82,6 +82,10 @@ AM_TIMEFRAMES = ["1H", "4H", "12H", "1D", "1W"]
 AM_TOP_STOP_PCT = 3.5       # stop ≤ 3.5% — 🏆 A+ setup (backtest: 75% g'alaba), 3.5–5% — 🥈 A setup
 AM_MAX_STOP_PCT = 5.0       # stop 5% dan katta bo'lsa — signal yo'q (oxirgi TP har doim ≥ 3R: stop 5% → TP ≥ 15%)
 AM_MAX_SIGNALS_PER_RUN = 4  # bir tekshiruvda ko'pi bilan nechta signal (backtestda cheklov yo'q edi)
+# 29-oktabr: top koinlar BTC ortidan yuradi (BTC tushsa — hammasi tushadi). Endi: ⭐ BTC + ⭐ ETH + skrener
+# tanlagan BTC ga kam ergashadigan halol koinlar (screener.json, har dushanba yangilanadi). BTC filtri o'chirilgan.
+AM_UNIVERSE = "screener"    # "fixed" — eski holat: yuqoridagi SYMBOLS ro'yxati (13 koin)
+AM_ALT_BTC_FILTER = False   # True — altkoinlar faqat BTC 4H sharti bajarilganda (eski holat)
 # Discount → sell-side sweep → 1H CHoCH → 4H OB + 1H FVG → retestda limit BUY
 AM_SWING_N = 2              # swing high/low: har ikki tomonda 2 tadan sham
 AM_SWEEP_LOOKBACK_4H = 18   # sweep oxirgi 18 ta 4H sham (3 sutka) ichida bo'lgan bo'lishi kerak

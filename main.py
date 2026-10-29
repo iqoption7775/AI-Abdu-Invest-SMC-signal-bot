@@ -17,6 +17,7 @@ from strategy import analyze, btc_gate
 from telegram import format_signal, send
 
 STATE_FILE = Path(__file__).with_name("state.json")
+SCREENER_FILE = Path(__file__).with_name("screener.json")  # screener.py yozadi (har dushanba)
 
 
 def load_state() -> dict:
@@ -32,6 +33,30 @@ def save_state(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
 
 
+def universe(abdu: bool) -> list[dict]:
+    """Tahlil qilinadigan koinlar. Skrener rejimida: ⭐ BTC + ⭐ ETH + screener.json dagi "live" ro'yxat
+    (BTC ga kam ergashadigan halol koinlar, har hafta yangilanadi). Fayl hali bo'lmasa — faqat BTC va ETH."""
+    if not (abdu and cfg.AM_UNIVERSE == "screener"):
+        return cfg.SYMBOLS
+    base = [s for s in cfg.SYMBOLS if "BTC" in s["name"] or "ETH" in s["name"]]
+    try:
+        picks = json.loads(SCREENER_FILE.read_text())["live"]
+    except Exception as e:
+        print(f"screener.json o'qilmadi ({e}) — faqat BTC va ETH tahlil qilinadi")
+        return base
+    names = {s["name"].lstrip("⭐ ") for s in base}
+    return base + [{"name": p["name"], "source": "kraken", "ticker": p["kraken"],
+                    "hold": p.get("hold"), "rebound": p.get("rebound")}
+                   for p in picks if p["name"] not in names]
+
+
+def decorrelation_note(hold: float, rebound: float) -> str:
+    """Skrener ko'rsatkichlari — signal sabablari ostida (oxirgi 90 kun, medianalar)."""
+    fall = "hatto o'sgan" if hold <= 0 else f"o'rtacha {hold * 10:.1f}% tushgan"
+    return (f"BTC ga kam ergashadi (90 kun): BTC 10% tushganda bu koin {fall}, "
+            f"BTC to'xtagach 3 kunda {rebound * 100:+.1f}% o'sgan")
+
+
 def run() -> int:
     state = load_state()
     abdu = cfg.STRATEGY == "abdu"
@@ -39,9 +64,11 @@ def run() -> int:
     analyze_fn = abdu_model.analyze if abdu else analyze
     candidates = []
     btc_trend = None  # BTC sharti matni; None — BTC pasayishda, diapazon tepasida yoki ma'lumot yo'q
-    for sym in cfg.SYMBOLS:
+    symbols = universe(abdu)
+    alt_filter = cfg.AM_ALT_BTC_FILTER if abdu else cfg.BTC_FILTER
+    for sym in symbols:
         is_btc = "BTC" in sym["name"]
-        if cfg.BTC_FILTER and not is_btc and btc_trend is None:
+        if alt_filter and not is_btc and btc_trend is None:
             print(f"· {sym['name']}: BTC sharti bajarilmadi (4H trend yoki diapazon tepasi) — altkoin signali yo'q")
             continue
         try:
@@ -55,6 +82,8 @@ def run() -> int:
         except Exception:
             print(f"❌ {sym['name']}: xato\n{traceback.format_exc()}")
             continue
+        if sig is not None and sym.get("hold") is not None:
+            sig.reasons.append(decorrelation_note(sym["hold"], sym.get("rebound") or 0.0))
         if sig is not None and not is_btc and btc_trend:
             sig.reasons.append(f"BTC ham qo'llab-quvvatlaydi: {btc_trend}")
         if sig is None:

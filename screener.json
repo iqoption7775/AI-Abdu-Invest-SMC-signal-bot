@@ -1,0 +1,20 @@
+{
+  "updated": "2026-10-29 15:00 UTC",
+  "live": [],
+  "test": [
+    {
+      "name": "LTC/USD",
+      "kraken": "LTCUSD",
+      "coinbase": "LTC-USD",
+      "hold": 0.861,
+      "rebound": 0.0107
+    },
+    {
+      "name": "XRP/USD",
+      "kraken": "XRPUSD",
+      "coinbase": "XRP-USD",
+      "hold": 0.921,
+      "rebound": 0.0143
+    }
+  ]
+}

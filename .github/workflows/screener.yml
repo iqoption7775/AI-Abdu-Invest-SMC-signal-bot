@@ -1,0 +1,50 @@
+name: BTC ga ergashmaydigan koinlar skreneri
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 0 * * 1"   # har dushanba 00:17 UTC (05:17 Toshkent) — koinlar ro'yxati yangilanadi
+  push:
+    paths:
+      - "screener.py"
+      - ".github/workflows/screener.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: screener
+  cancel-in-progress: true
+
+jobs:
+  screener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Koinlarni tanlash (BTC tushganda ushlab turadi, BTC to'xtagach o'sadi)
+        run: python screener.py
+      - name: Ro'yxatni saqlash (jonli bot darhol shu koinlarni oladi)
+        run: |
+          git config user.name "abdu-invest-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add screener.json hisobot
+          git commit -m "Skrener: BTC ga kam ergashadigan koinlar yangilandi" || exit 0
+          git pull --rebase
+          git push
+      - name: Backtest — eski 13 koin va yangi ro'yxat solishtiriladi
+        if: github.event_name != 'schedule'
+        env:
+          UNIVERSE: screener
+        run: python backtest_v2.py
+      - name: Backtest hisobotini saqlash
+        if: github.event_name != 'schedule'
+        run: |
+          git add hisobot
+          git commit -m "Skrener backtest hisoboti" || exit 0
+          git pull --rebase
+          git push

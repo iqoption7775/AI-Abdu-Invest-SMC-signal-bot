@@ -94,29 +94,32 @@ def simulate(m15: pd.DataFrame, t: pd.Timestamp, entry: float, stop: float, tps:
             f = i
             break
         if hi[i] >= tps[0]:
-            return {"res": "o'tib ketdi", "a": 0.0, "b": 0.0}  # narx zonaga qaytmay TP1 ga ketdi
+            return {"res": "o'tib ketdi", "a": 0.0, "b": 0.0, "until": idx[i]}  # narx zonaga qaytmay TP1 ga ketdi
     if f is None:
-        return {"res": "to'lmadi" if exp < len(fut) else "kutilmoqda", "a": 0.0, "b": 0.0}
+        last = idx[min(exp, len(fut)) - 1] if len(fut) else t
+        return {"res": "to'lmadi" if exp < len(fut) else "kutilmoqda", "a": 0.0, "b": 0.0, "until": last}
     risk = entry - stop
     rr = [(p - entry) / risk for p in tps]
     end = np.searchsorted(idx.values, (idx[f] + pd.Timedelta(days=MAX_HOLD_D)).to_datetime64())
-    tp1_hit, mfe = False, 0.0
+    tp1_hit, mfe, free = False, 0.0, None   # free — TP1 olingan vaqt: stop kirishga ko'chdi, xavf qolmadi
     for i in range(f, min(end, len(fut))):
         if lo[i] <= (entry if tp1_hit else stop) and not (i == f and tp1_hit):
             if tp1_hit:   # B: qolgan yarmi zararsiz yopildi
                 return {"res": "TP1 + zararsiz", "a": _a_after_tp1(lo, hi, i, stop, tps[-1], rr[-1]),
-                        "b": 0.5 * rr[0], "mfe": mfe, "fill": idx[f]}
-            return {"res": "stop", "a": -1.0, "b": -1.0, "mfe": mfe, "fill": idx[f]}
+                        "b": 0.5 * rr[0], "mfe": mfe, "fill": idx[f], "until": free}
+            return {"res": "stop", "a": -1.0, "b": -1.0, "mfe": mfe, "fill": idx[f], "until": idx[i]}
         mfe = max(mfe, (hi[i] - entry) / risk)
         if hi[i] >= tps[-1]:
-            return {"res": "TP", "a": rr[-1], "b": 0.5 * rr[0] + 0.5 * rr[-1], "mfe": mfe, "fill": idx[f]}
+            return {"res": "TP", "a": rr[-1], "b": 0.5 * rr[0] + 0.5 * rr[-1], "mfe": mfe, "fill": idx[f],
+                    "until": free or idx[i]}
         if not tp1_hit and hi[i] >= tps[0] and len(tps) > 1:
-            tp1_hit = True
-    if min(end, len(fut)) >= len(fut):
-        return {"res": "ochiq", "a": 0.0, "b": 0.0, "mfe": mfe, "fill": idx[f]}
-    last = (cl[min(end, len(fut)) - 1] - entry) / risk
+            tp1_hit, free = True, idx[i]
+    k = min(end, len(fut)) - 1
+    if k + 1 >= len(fut):
+        return {"res": "ochiq", "a": 0.0, "b": 0.0, "mfe": mfe, "fill": idx[f], "until": free or idx[k]}
+    last = (cl[k] - entry) / risk
     return {"res": "vaqt tugadi", "a": last, "b": (0.5 * rr[0] + 0.5 * max(last, 0)) if tp1_hit else last,
-            "mfe": mfe, "fill": idx[f]}
+            "mfe": mfe, "fill": idx[f], "until": free or idx[k]}
 
 
 def _a_after_tp1(lo, hi, i, stop, final, final_rr):
@@ -188,6 +191,17 @@ def summarize(tr: list[dict]) -> dict:
     }
 
 
+def cap_open(trades: list[dict], n: int, label: str) -> list[dict]:
+    """Bir vaqtda ko'pi bilan n ta "xavfli" signal: kutilayotgan limit yoki stopi hali kirishga ko'chmagan savdo.
+    Yangi signal kelganda shunday signallar n ta bo'lsa — u yuborilmaydi (AVAX+ALGO kabi birga stop bo'lmasin)."""
+    kept = []
+    for x in sorted(trades, key=lambda x: (x["t"], x["risk"])):
+        if sum(1 for k in kept if k["until"] > x["t"]) >= n:
+            continue
+        kept.append({**x, "variant": label})
+    return kept
+
+
 def main():
     end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     data = {}
@@ -200,6 +214,12 @@ def main():
     btc = data.get("⭐ BTC/USD")
     with ProcessPoolExecutor() as ex:
         allt = [x for part in ex.map(run_symbol, [(s, f, btc) for s, f in data.items()]) for x in part]
+    # Jonli bot varianti + "bir vaqtda ko'pi bilan N ta ochiq xavf" cheklovi (birga stop bo'lishga qarshi)
+    live = [n for n in VARIANTS if "JONLI" in n or "ESKI BOT" in n][0]
+    for n in (3, 2):
+        label = f"{live.split('.')[0]}+{n}. {live.split('. ', 1)[1].split(':')[0]} + bir vaqtda ≤ {n} ta ochiq xavf"
+        allt += cap_open([x for x in allt if x["variant"] == live], n, label)
+        VARIANTS[label] = VARIANTS[live]
 
     L = [f"# Abdu modeli — backtest ({DAYS} kun, {len(data)} koin) — {end:%Y-%m-%d %H:%M} UTC", "",
          "Setup: discount → sell-side sweep → 1H CHoCH → 4H OB + 1H FVG → retestda limit BUY. Oxirgi TP ≥ 1:3.", "",

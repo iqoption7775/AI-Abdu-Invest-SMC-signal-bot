@@ -34,15 +34,19 @@ def save_state(state: dict) -> None:
 
 
 def universe(abdu: bool) -> list[dict]:
-    """Tahlil qilinadigan koinlar. Skrener rejimida: ⭐ BTC + ⭐ ETH + screener.json dagi "live" ro'yxat
-    (BTC ga kam ergashadigan halol koinlar, har hafta yangilanadi). Fayl hali bo'lmasa — faqat BTC va ETH."""
-    if not (abdu and cfg.AM_UNIVERSE == "screener"):
+    """Tahlil qilinadigan koinlar (config.AM_UNIVERSE):
+      "fixed"          — config.SYMBOLS (13 koin);
+      "fixed+screener" — 13 koin + screener.json dagi "live" ro'yxat (BTC ga kam ergashadigan halol koinlar);
+      "screener"       — ⭐ BTC + ⭐ ETH + screener.json ro'yxati."""
+    mode = cfg.AM_UNIVERSE if abdu else "fixed"
+    if mode not in ("screener", "fixed+screener"):
         return cfg.SYMBOLS
-    base = [s for s in cfg.SYMBOLS if "BTC" in s["name"] or "ETH" in s["name"]]
+    base = cfg.SYMBOLS if mode == "fixed+screener" else \
+        [s for s in cfg.SYMBOLS if "BTC" in s["name"] or "ETH" in s["name"]]
     try:
         picks = json.loads(SCREENER_FILE.read_text())["live"]
     except Exception as e:
-        print(f"screener.json o'qilmadi ({e}) — faqat BTC va ETH tahlil qilinadi")
+        print(f"screener.json o'qilmadi ({e}) — skrener koinlarisiz davom etiladi")
         return base
     names = {s["name"].lstrip("⭐ ") for s in base}
     return base + [{"name": p["name"], "source": "kraken", "ticker": p["kraken"],
@@ -57,11 +61,33 @@ def decorrelation_note(hold: float, rebound: float) -> str:
             f"BTC to'xtagach 3 kunda {rebound * 100:+.1f}% o'sgan")
 
 
+def abdu_analyze(symbol: str, frames: dict, price: float):
+    """Abdu modeli: signal + setup (grafikda OB, FVG, likvidlik va CHoCH chizish uchun)."""
+    s = abdu_model.detect(frames)
+    sig = abdu_model.build(symbol, s, frames, price) if s else None
+    if sig is not None:
+        sig.setup = s
+    return sig
+
+
+def deliver(sig) -> bool:
+    """Signal: grafik rasm (stop/TP darajalari bilan) + qisqa izoh. Grafik chizilmasa — faqat matn."""
+    text = format_signal(sig)
+    photo = None
+    if cfg.SIGNAL_CHART and "1H" in (getattr(sig, "frames", None) or {}):
+        try:
+            import chart
+            photo = chart.render(sig)
+        except Exception:
+            print(f"Grafik chizilmadi ({sig.symbol}):\n{traceback.format_exc()}")
+    return send(text, photo) if photo else send(text)
+
+
 def run() -> int:
     state = load_state()
     abdu = cfg.STRATEGY == "abdu"
     tfs = cfg.AM_TIMEFRAMES if abdu else cfg.HTF_TIMEFRAMES + cfg.LTF_TIMEFRAMES
-    analyze_fn = abdu_model.analyze if abdu else analyze
+    analyze_fn = abdu_analyze if abdu else analyze
     candidates = []
     btc_trend = None  # BTC sharti matni; None — BTC pasayishda, diapazon tepasida yoki ma'lumot yo'q
     symbols = universe(abdu)
@@ -89,6 +115,7 @@ def run() -> int:
         if sig is None:
             print(f"· {sym['name']}: signal yo'q (narx {price})")
             continue
+        sig.frames = frames
         key = getattr(sig, "setup_key", None) or sig.key
         sig.state_key = key
         if key in state:
@@ -114,7 +141,7 @@ def run() -> int:
         candidates = []
     sent = 0
     for sig in candidates[:limit]:
-        if send(format_signal(sig)):
+        if deliver(sig):
             state[sig.state_key] = time.time()
             sent += 1
             print(f"✅ {sig.symbol}: signal yuborildi ({sig.score} ta sabab)")

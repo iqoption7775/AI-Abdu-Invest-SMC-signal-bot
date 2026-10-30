@@ -73,6 +73,7 @@ SWING_LEN = 2             # Swing high/low aniqlash uchun har ikki tomondagi sha
 MAX_ZONES_PER_TF = 6      # Har bir timeframe'dan eng yangi nechta zona olinadi
 
 SYMBOL_COOLDOWN_HOURS = 4 # Bitta juftlikdan signaldan keyin kamida shuncha soat yangi signal yo'q
+SIGNAL_CHART = True       # signal grafik rasm bilan yuboriladi (kirish/stop/TP, OB, FVG, likvidlik, CHoCH)
 TIMEZONE = "Asia/Tashkent"
 BRAND = "AI Abdu Invest"
 
@@ -82,10 +83,12 @@ AM_TIMEFRAMES = ["1H", "4H", "12H", "1D", "1W"]
 AM_TOP_STOP_PCT = 3.5       # stop ≤ 3.5% — 🏆 A+ setup (backtest: 75% g'alaba), 3.5–5% — 🥈 A setup
 AM_MAX_STOP_PCT = 5.0       # stop 5% dan katta bo'lsa — signal yo'q (oxirgi TP har doim ≥ 3R: stop 5% → TP ≥ 15%)
 AM_MAX_SIGNALS_PER_RUN = 4  # bir tekshiruvda ko'pi bilan nechta signal (backtestda cheklov yo'q edi)
-# 29-oktabr: top koinlar BTC ortidan yuradi (BTC tushsa — hammasi tushadi). Endi: ⭐ BTC + ⭐ ETH + skrener
-# tanlagan BTC ga kam ergashadigan halol koinlar (screener.json, har dushanba yangilanadi). BTC filtri o'chirilgan.
-AM_UNIVERSE = "screener"    # "fixed" — eski holat: yuqoridagi SYMBOLS ro'yxati (13 koin)
-AM_ALT_BTC_FILTER = False   # True — altkoinlar faqat BTC 4H sharti bajarilganda (eski holat)
+# Koinlar ro'yxati (29-oktabr backtesti bo'yicha tanlandi: 13 koin + BTC filtri — 75%, +15.4R / 90 kun):
+#   "fixed+screener" — yuqoridagi 13 koin + skrener topgan BTC ga kam ergashadigan halol koinlar (screener.json,
+#                      har dushanba yangilanadi; shartdan o'tgan koin bo'lmasa — faqat 13 koin)
+#   "fixed"          — faqat 13 koin;  "screener" — ⭐ BTC + ⭐ ETH + skrener koinlari
+AM_UNIVERSE = "fixed+screener"
+AM_ALT_BTC_FILTER = True    # altkoinlarga signal faqat BTC 4H sharti bajarilganda (backtest: stoplar 19 → 6)
 # Discount → sell-side sweep → 1H CHoCH → 4H OB + 1H FVG → retestda limit BUY
 AM_SWING_N = 2              # swing high/low: har ikki tomonda 2 tadan sham
 AM_SWEEP_LOOKBACK_4H = 18   # sweep oxirgi 18 ta 4H sham (3 sutka) ichida bo'lgan bo'lishi kerak

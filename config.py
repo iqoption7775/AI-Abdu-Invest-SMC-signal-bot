@@ -82,6 +82,7 @@ STRATEGY = "abdu"           # "abdu" — Abdu modeli (23-oktabrdan jonli); "v1" 
 AM_TIMEFRAMES = ["1H", "4H", "12H", "1D", "1W"]
 AM_TOP_STOP_PCT = 3.5       # stop ≤ 3.5% — 🏆 A+ setup (backtest: 75% g'alaba), 3.5–5% — 🥈 A setup
 AM_MAX_STOP_PCT = 5.0       # stop 5% dan katta bo'lsa — signal yo'q (oxirgi TP har doim ≥ 3R: stop 5% → TP ≥ 15%)
+AM_MAX_OPEN_RISK = 3       # bir vaqtda ko'pi bilan 3 ta ochiq xavf (backtest 90 kun: stop 8 → 4, +14.0R → +16.4R); 0 — cheklovsiz
 AM_MAX_SIGNALS_PER_RUN = 4  # bir tekshiruvda ko'pi bilan nechta signal (backtestda cheklov yo'q edi)
 # Koinlar ro'yxati (29-oktabr backtesti bo'yicha tanlandi: 13 koin + BTC filtri — 75%, +15.4R / 90 kun):
 #   "fixed+screener" — yuqoridagi 13 koin + skrener topgan BTC ga kam ergashadigan halol koinlar (screener.json,

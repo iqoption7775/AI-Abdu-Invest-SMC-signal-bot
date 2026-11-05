@@ -40,6 +40,7 @@ class Setup:
     ob_touched: bool
     disc: float                  # sweep low 1D diapazonning qayerida (0 — tub, 1 — tepa)
     atr4h: float
+    peak_done: bool = True       # impuls cho'qqisi tasdiqlanganmi (erta signalda — hali davom etishi mumkin)
 
     @property
     def key_time(self) -> str:
@@ -101,7 +102,8 @@ def detect(frames: dict[str, pd.DataFrame]) -> Setup | None:
     c = p + 1 + int(after[0])
     imp = p + int(np.argmax(hi_[p:]))
     imp_high = float(hi_[imp])
-    if imp > len(h1) - 1 - n:
+    peak_done = imp <= len(h1) - 1 - n
+    if not peak_done and cfg.AM_WAIT_PEAK:
         return None  # impuls hali davom etyapti — cho'qqi tasdiqlanib, narx retestga qayta boshlagach signal
 
     # 4) 4H bullish OB — sweep shamidan orqaga, oxirgi qizil sham
@@ -132,14 +134,15 @@ def detect(frames: dict[str, pd.DataFrame]) -> Setup | None:
     disc = (sweep_low - bot) / (top - bot) if top > bot else 0.0
 
     return Setup(h1.index[p], sweep_low, pool, f4.index[k], lh, h1.index[c], imp_high,
-                 ob, fvg, fvg_touched, ob_touched, disc, a4)
+                 ob, fvg, fvg_touched, ob_touched, disc, a4, peak_done)
 
 
-def _targets(entry: float, stop: float, frames: dict, imp_high: float, a4: float) -> tuple[list[Target], list[Zone]]:
-    """TP nomzodlari: impuls cho'qqisi, 4H/12H/1D/1W swing high'lar, PDH/PWH, to'ldirilmagan bearish FVG/OB."""
+def _targets(entry: float, stop: float, frames: dict, imp_high: float | None, a4: float) -> tuple[list[Target], list[Zone]]:
+    """TP nomzodlari: impuls cho'qqisi (tasdiqlangan bo'lsa), 4H/12H/1D/1W swing high'lar, PDH/PWH,
+    to'ldirilmagan bearish FVG/OB."""
     risk = entry - stop
     front = cfg.FRONTRUN_ATR_4H * a4
-    cands: list[tuple[float, str]] = [(imp_high - front, "1H impuls cho'qqisi oldidan (likvidlik)")]
+    cands: list[tuple[float, str]] = [] if imp_high is None else [(imp_high - front, "1H impuls cho'qqisi oldidan (likvidlik)")]
     supply: list[Zone] = []
     for tf in ("4H", "12H", "1D", "1W"):
         df = frames[tf]
@@ -198,7 +201,7 @@ def build(symbol: str, s: Setup, frames: dict, price: float, entry_mode: str | N
     risk = entry - stop
     if risk / entry * 100 > cfg.AM_MAX_STOP_PCT:
         return None  # stop juda katta (zona keng / sweep chuqur) — backtestda zarar bergan
-    targets, supply = _targets(entry, stop, frames, s.imp_high, s.atr4h)
+    targets, supply = _targets(entry, stop, frames, s.imp_high if s.peak_done else None, s.atr4h)
     if not targets:
         return None
     if cfg.AM_BLOCK_SUPPLY_R > 0 and any(entry < z.bottom < entry + cfg.AM_BLOCK_SUPPLY_R * risk for z in supply):

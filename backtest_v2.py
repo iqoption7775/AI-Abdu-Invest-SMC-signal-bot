@@ -38,7 +38,10 @@ VARIANTS = {
     "4. FVG tepasi + BTC 4H trend filtri": dict(entry="fvg_top", btc=True),
     "5. FVG tepasi, discount shartisiz": dict(entry="fvg_top", AM_USE_DISCOUNT=False),
     "6. FVG tepasi + 1R ichida taklif zonasi bo'lmasin": dict(entry="fvg_top", AM_BLOCK_SUPPLY_R=1.0),
-    "7. JONLI BOT: FVG tepasi + BTC filtri + stop ≤ 5%": dict(entry="fvg_top", btc=True, AM_MAX_STOP_PCT=cfg.AM_MAX_STOP_PCT),
+    "7. JONLI BOT: FVG tepasi + BTC filtri + stop ≤ 5%":
+        dict(entry="fvg_top", btc=True, AM_MAX_STOP_PCT=cfg.AM_MAX_STOP_PCT, late_guard=True),
+    "8. ERTA SIGNAL: CHoCH paytida (cho'qqini kutmasdan) + BTC filtri + stop ≤ 5%":
+        dict(entry="fvg_top", btc=True, AM_MAX_STOP_PCT=cfg.AM_MAX_STOP_PCT, AM_WAIT_PEAK=False, late_guard=True),
 }
 # UNIVERSE=screener: skrener tanlagan (BTC ga kam ergashadigan) koinlar va hozirgi 13 koin solishtiriladi.
 # Tanlov 180→90 kun oldingi ma'lumotdan ("test"), sinov — oxirgi 90 kun: natija o'zini aldamaydi.
@@ -59,9 +62,10 @@ if UNIVERSE == "screener":
     }
     REPORT = "abdu_backtest_screener.md"
 
-_CFG = ["AM_USE_DISCOUNT", "AM_BLOCK_SUPPLY_R", "AM_MAX_STOP_PCT"]
+_CFG = ["AM_USE_DISCOUNT", "AM_BLOCK_SUPPLY_R", "AM_MAX_STOP_PCT", "AM_WAIT_PEAK"]
 BASE = {k: getattr(cfg, k) for k in _CFG}
 BASE["AM_MAX_STOP_PCT"] = 100.0  # 1–6 variantlarda stop chegarasi yo'q (avvalgi backtest bilan solishtirish uchun)
+BASE["AM_WAIT_PEAK"] = True      # standart: impuls cho'qqisi tasdiqlangach signal
 
 
 def load(product: str, end: datetime) -> dict[str, pd.DataFrame]:
@@ -141,14 +145,20 @@ def run_symbol(args):
     for t in hours:
         try:
             frames, price = snapshot(full, t)
-            s = am.detect(frames)
+            setups = {}
+            for wait in {v.get("AM_WAIT_PEAK", True) for v in VARIANTS.values()}:
+                cfg.AM_WAIT_PEAK = wait   # erta signal (CHoCH paytida) yoki impuls cho'qqisi tasdiqlangach
+                setups[wait] = am.detect(frames)
         except Exception:
             continue
-        if s is None:
+        if not any(setups.values()):
             continue
         btc_ok = None
-        key = f"{sym}|{s.key_time}"
         for name, v in VARIANTS.items():
+            s = setups.get(v.get("AM_WAIT_PEAK", True))
+            if s is None:
+                continue
+            key = f"{sym}|{s.key_time}"
             if key in sent[name] or ("syms" in v and sym not in v["syms"]):
                 continue  # bu setup bo'yicha signal berilgan yoki koin bu variantga kirmaydi
             for k in _CFG:
@@ -169,6 +179,8 @@ def run_symbol(args):
             if sig is None or sig.setup_key in sent[name]:
                 continue
             sent[name].add(sig.setup_key)
+            if v.get("late_guard") and price >= sig.targets[0].price:
+                continue  # jonli bot: narx TP1 dan yuqorida — kech, signal yuborilmaydi (setup ishlatilgan)
             r = simulate(full["15m"], t, sig.entry, sig.stop, [x.price for x in sig.targets])
             r.update(variant=name, symbol=sym, t=t, entry=sig.entry, risk=(sig.entry - sig.stop) / sig.entry * 100,
                      final_rr=sig.targets[-1].rr, tp1_rr=sig.targets[0].rr)
@@ -215,11 +227,12 @@ def main():
     with ProcessPoolExecutor() as ex:
         allt = [x for part in ex.map(run_symbol, [(s, f, btc) for s, f in data.items()]) for x in part]
     # Jonli bot varianti + "bir vaqtda ko'pi bilan N ta ochiq xavf" cheklovi (birga stop bo'lishga qarshi)
-    live = [n for n in VARIANTS if "JONLI" in n or "ESKI BOT" in n][0]
-    for n in (3, 2):
-        label = f"{live.split('.')[0]}+{n}. {live.split('. ', 1)[1].split(':')[0]} + bir vaqtda ≤ {n} ta ochiq xavf"
-        allt += cap_open([x for x in allt if x["variant"] == live], n, label)
-        VARIANTS[label] = VARIANTS[live]
+    bases = [n for n in VARIANTS if "JONLI" in n or "ESKI BOT" in n or "ERTA" in n]
+    for base in bases:
+        for n in ((3, 2) if base == bases[0] else (3,)):
+            label = f"{base.split('.')[0]}+{n}. {base.split('. ', 1)[1].split(':')[0]} + bir vaqtda ≤ {n} ta ochiq xavf"
+            allt += cap_open([x for x in allt if x["variant"] == base], n, label)
+            VARIANTS[label] = VARIANTS[base]
 
     L = [f"# Abdu modeli — backtest ({DAYS} kun, {len(data)} koin) — {end:%Y-%m-%d %H:%M} UTC", "",
          "Setup: discount → sell-side sweep → 1H CHoCH → 4H OB + 1H FVG → retestda limit BUY. Oxirgi TP ≥ 1:3.", "",

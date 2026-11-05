@@ -6,6 +6,7 @@ Qo'lda ishga tushirish:  python main.py
 from __future__ import annotations
 
 import json
+import os
 import time
 import traceback
 from pathlib import Path
@@ -14,6 +15,7 @@ import config as cfg
 from data import fetch
 import abdu_model
 from strategy import analyze, btc_gate
+import telegram
 from telegram import format_signal, send
 
 STATE_FILE = Path(__file__).with_name("state.json")
@@ -29,10 +31,8 @@ def load_state() -> dict:
 
 def save_state(state: dict) -> None:
     week_ago = time.time() - 7 * 24 * 3600
-    active = state.get(ACTIVE, {})
-    state = {k: v for k, v in state.items() if k != ACTIVE and v > week_ago}  # eski yozuvlarni tozalash
-    if active:
-        state[ACTIVE] = active
+    # "_" bilan boshlanadigan kalitlar — xizmat ma'lumoti (ochiq signallar, guruhlar); qolgani — eski yozuvlar tozalanadi
+    state = {k: v for k, v in state.items() if k.startswith("_") or v > week_ago}
     STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
 
 
@@ -116,8 +116,25 @@ def deliver(sig) -> bool:
     return send(text, photo) if photo else send(text)
 
 
+def connect_groups(state: dict) -> None:
+    """Egasi botni yangi guruh/kanalga qo'shgan bo'lsa — topib, ikkala tomonga tasdiq yuboradi."""
+    for cid, title, kind in telegram.sync_groups(state):
+        name = f"«{title}»" if title else cid
+        if kind != "channel":  # kanalga xizmat xabari chiqmasin — obunachilar faqat signallarni ko'radi
+            telegram.send(f"✅ <b>{cfg.BRAND}</b> signal boti ulandi.\nBUY signallari shu yerga grafik bilan keladi.",
+                          only=[cid])
+        owner = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
+        if owner:
+            telegram.send(f"✅ Bot {name} ga ulandi — signallar endi u yerga ham yuboriladi.", only=[owner])
+        print(f"Yangi guruh ulandi: {name}")
+
+
 def run() -> int:
     state = load_state()
+    try:
+        connect_groups(state)
+    except Exception:
+        print(f"Guruhlarni tekshirishda xato:\n{traceback.format_exc()}")
     abdu = cfg.STRATEGY == "abdu"
     tfs = cfg.AM_TIMEFRAMES if abdu else cfg.HTF_TIMEFRAMES + cfg.LTF_TIMEFRAMES
     analyze_fn = abdu_analyze if abdu else analyze
@@ -168,6 +185,12 @@ def run() -> int:
         if key in state:
             print(f"· {sym['name']}: bu setup bo'yicha signal avval yuborilgan, takrorlanmaydi")
             continue
+        if abdu and sig.targets and price >= sig.targets[0].price:
+            # Narx TP1 dan yuqorida — kirishsiz ketib qolgan ("o'tib ketdi"). Backtestda bunday setup savdo emas;
+            # kech signal guruhni chalg'itmasin. Setup ishlatilgan deb belgilanadi (keyin ham yuborilmaydi).
+            state[key] = time.time()
+            print(f"· {sym['name']}: narx ({price}) TP1 dan yuqorida — setup o'tib ketgan, signal yuborilmaydi")
+            continue
         recent = [v for k, v in state.items() if k.startswith(sig.symbol + "|")]
         if not abdu and recent and time.time() - max(recent) < cfg.SYMBOL_COOLDOWN_HOURS * 3600:
             print(f"· {sym['name']}: yaqinda signal berilgan, kutish vaqti tugamagan")
@@ -181,7 +204,7 @@ def run() -> int:
 
     # Eski botda: koinlar birga harakatlanadi — yaqinda signal bo'lsa, yangi to'lqin kutiladi.
     # Abdu modelida har bir setup mustaqil (backtest ham shunday) — umumiy kutish yo'q.
-    last_any = max((v for k, v in state.items() if k != ACTIVE), default=0)
+    last_any = max((v for k, v in state.items() if not k.startswith("_")), default=0)
     if not abdu and candidates and time.time() - last_any < cfg.GLOBAL_COOLDOWN_HOURS * 3600:
         for sig in candidates:
             print(f"· {sig.symbol}: umumiy kutish vaqti ({cfg.GLOBAL_COOLDOWN_HOURS} soat) tugamagan")

@@ -73,6 +73,7 @@ SWING_LEN = 2             # Swing high/low aniqlash uchun har ikki tomondagi sha
 MAX_ZONES_PER_TF = 6      # Har bir timeframe'dan eng yangi nechta zona olinadi
 
 SYMBOL_COOLDOWN_HOURS = 4 # Bitta juftlikdan signaldan keyin kamida shuncha soat yangi signal yo'q
+SEND_TO_OWNER = True      # signal egasiga (TELEGRAM_CHAT_ID) ham yuboriladi; guruh/kanallar — bot qo'shilganda o'zi topiladi
 SIGNAL_CHART = True       # signal grafik rasm bilan yuboriladi (kirish/stop/TP, OB, FVG, likvidlik, CHoCH)
 TIMEZONE = "Asia/Tashkent"
 BRAND = "AI Abdu Invest"
@@ -82,6 +83,7 @@ STRATEGY = "abdu"           # "abdu" — Abdu modeli (23-oktabrdan jonli); "v1" 
 AM_TIMEFRAMES = ["1H", "4H", "12H", "1D", "1W"]
 AM_TOP_STOP_PCT = 3.5       # stop ≤ 3.5% — 🏆 A+ setup (backtest: 75% g'alaba), 3.5–5% — 🥈 A setup
 AM_MAX_STOP_PCT = 5.0       # stop 5% dan katta bo'lsa — signal yo'q (oxirgi TP har doim ≥ 3R: stop 5% → TP ≥ 15%)
+AM_WAIT_PEAK = True         # True — signal impuls cho'qqisi tasdiqlangach (kechroq); False — CHoCH paytida (erta signal)
 AM_MAX_OPEN_RISK = 3       # bir vaqtda ko'pi bilan 3 ta ochiq xavf (backtest 90 kun: stop 8 → 4, +14.0R → +16.4R); 0 — cheklovsiz
 AM_MAX_SIGNALS_PER_RUN = 4  # bir tekshiruvda ko'pi bilan nechta signal (backtestda cheklov yo'q edi)
 # Koinlar ro'yxati (29-oktabr backtesti bo'yicha tanlandi: 13 koin + BTC filtri — 75%, +15.4R / 90 kun):

@@ -1,6 +1,7 @@
-"""Signalni chiroyli formatlab, Telegram'ga yuborish."""
+"""Signalni chiroyli formatlab, Telegram'ga yuborish (shaxsiy chat + bot qo'shilgan guruh/kanallar)."""
 from __future__ import annotations
 
+import json
 import os
 
 import requests
@@ -45,25 +46,89 @@ def format_signal(s: Signal) -> str:
     return "\n".join(lines)
 
 
-def send(text: str, photo: bytes | None = None) -> bool:
-    """Matn yoki grafik rasm + izoh. Rasm yuborilmasa — oddiy matn bilan qayta urinadi."""
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        print("[DRY RUN] Telegram sozlanmagan, xabar faqat chop etildi" + (" (grafik bilan)" if photo else "") + ":\n" + text)
-        return False
-    api = f"https://api.telegram.org/bot{token}"
+GROUPS = "_guruhlar"       # state.json ichida: signal yuboriladigan guruh/kanallar {chat_id: turi}
+_groups: list[str] = []    # shu ishga tushirishda yuboriladigan guruhlar (sync_groups to'ldiradi)
+
+
+def _creds() -> tuple[str | None, str | None]:
+    return os.getenv("TELEGRAM_BOT_TOKEN"), (os.getenv("TELEGRAM_CHAT_ID") or "").strip() or None
+
+
+def sync_groups(state: dict) -> list[tuple[str, str, str]]:
+    """Bot qo'shilgan guruh/kanallarni Telegram'dan o'zi topadi.
+    Faqat egasi (TELEGRAM_CHAT_ID dagi foydalanuvchi) qo'shgan guruhlar olinadi — begona guruhlarga signal ketmaydi.
+    Bot guruhdan chiqarilsa — ro'yxatdan o'chadi. Qaytaradi: yangi ulangan [(chat_id, nomi, turi)]."""
+    global _groups
+    token, owner = _creds()
+    groups = dict(state.get(GROUPS, {}))
+    new: list[tuple[str, str, str]] = []
+    if token and owner:
+        api = f"https://api.telegram.org/bot{token}"
+        try:
+            js = requests.get(f"{api}/getUpdates", timeout=20, params={
+                "timeout": 0, "allowed_updates": json.dumps(["my_chat_member", "message", "channel_post"])}).json()
+        except Exception as e:
+            js = {"ok": False, "description": str(e)}
+        if not js.get("ok"):
+            print(f"Guruhlarni tekshirib bo'lmadi: {js.get('description', js)}")
+        last = None
+        for u in js.get("result", []) if js.get("ok") else []:
+            last = u["update_id"]
+            m = u.get("my_chat_member")
+            if m and m["chat"]["type"] != "private":
+                cid, status = str(m["chat"]["id"]), m["new_chat_member"]["status"]
+                if status in ("administrator", "member") and str(m["from"]["id"]) == owner:
+                    if cid not in groups:
+                        groups[cid] = m["chat"]["type"]
+                        new.append((cid, m["chat"].get("title", ""), m["chat"]["type"]))
+                elif status in ("left", "kicked") and cid in groups:
+                    del groups[cid]
+                    print(f"Bot guruhdan chiqarildi: {cid}")
+            msg = u.get("message") or {}
+            old = str(msg.get("chat", {}).get("id", ""))
+            if msg.get("migrate_to_chat_id") and old in groups:     # guruh supergroup'ga aylandi — ID o'zgaradi
+                groups[str(msg["migrate_to_chat_id"])] = "supergroup"
+                del groups[old]
+        if last is not None:  # o'qilgan yangilanishlarni tasdiqlash
+            try:
+                requests.get(f"{api}/getUpdates", params={"offset": last + 1, "timeout": 0}, timeout=20)
+            except Exception:
+                pass
+    if groups:
+        state[GROUPS] = groups
+    else:
+        state.pop(GROUPS, None)
+    _groups = [g for g in groups if g != owner]
+    return new
+
+
+def _send_one(api: str, chat_id: str, text: str, photo: bytes | None) -> bool:
     if photo and len(text) <= 1024:
         r = requests.post(f"{api}/sendPhoto", data={"chat_id": chat_id, "caption": text, "parse_mode": "HTML"},
                           files={"photo": ("signal.png", photo, "image/png")}, timeout=40)
         if r.ok:
             return True
-        print(f"Telegram rasm xatosi {r.status_code}: {r.text[:300]} — matn yuboriladi")
-    r = requests.post(
-        f"{api}/sendMessage",
-        json={"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True},
-        timeout=20,
-    )
+        print(f"Telegram rasm xatosi ({chat_id}) {r.status_code}: {r.text[:300]} — matn yuboriladi")
+    r = requests.post(f"{api}/sendMessage", timeout=20, json={
+        "chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True})
     if not r.ok:
-        print(f"Telegram xatosi {r.status_code}: {r.text[:300]}")
+        print(f"Telegram xatosi ({chat_id}) {r.status_code}: {r.text[:300]}")
     return r.ok
+
+
+def send(text: str, photo: bytes | None = None, only: list[str] | None = None) -> bool:
+    """Matn yoki grafik rasm + izoh: egasiga (TELEGRAM_CHAT_ID) va bot qo'shilgan guruh/kanallarga.
+    Rasm yuborilmasa — oddiy matn bilan qayta urinadi. Kamida bittasiga yetsa — True."""
+    token, owner = _creds()
+    targets = only if only is not None else ([owner] if owner and cfg.SEND_TO_OWNER else []) + _groups
+    if not token or not targets:
+        print("[DRY RUN] Telegram sozlanmagan, xabar faqat chop etildi" + (" (grafik bilan)" if photo else "") + ":\n" + text)
+        return False
+    api = f"https://api.telegram.org/bot{token}"
+    ok = False
+    for chat_id in targets:
+        try:
+            ok = _send_one(api, chat_id, text, photo) or ok
+        except Exception as e:
+            print(f"Telegram ({chat_id}) yuborilmadi: {e}")
+    return ok

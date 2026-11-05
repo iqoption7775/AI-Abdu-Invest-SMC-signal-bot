@@ -2,7 +2,7 @@ name: AI Abdu Invest signallari
 
 on:
   schedule:
-    - cron: "3 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
 
 permissions:

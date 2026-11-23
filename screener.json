@@ -1,28 +1,20 @@
 {
-  "updated": "2026-11-16 01:00 UTC",
-  "live": [
-    {
-      "name": "BCH/USD",
-      "kraken": "BCHUSD",
-      "coinbase": "BCH-USD",
-      "hold": 0.946,
-      "rebound": 0.0088
-    }
-  ],
+  "updated": "2026-11-23 07:00 UTC",
+  "live": [],
   "test": [
     {
       "name": "LTC/USD",
       "kraken": "LTCUSD",
       "coinbase": "LTC-USD",
-      "hold": 0.861,
-      "rebound": 0.0107
+      "hold": 0.905,
+      "rebound": 0.0413
     },
     {
-      "name": "XRP/USD",
-      "kraken": "XRPUSD",
-      "coinbase": "XRP-USD",
-      "hold": 0.921,
-      "rebound": 0.0143
+      "name": "AVAX/USD",
+      "kraken": "AVAXUSD",
+      "coinbase": "AVAX-USD",
+      "hold": 0.985,
+      "rebound": 0.0216
     }
   ]
 }
